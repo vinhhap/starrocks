@@ -1323,6 +1323,6 @@ vectorized_functions = [
     [170500, 'row', True, False, 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::new_struct'],
     [170501, 'named_struct', True, False, 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::named_struct'],
 
-    # user function
-    [180000, 'is_role_in_session', True, False, 'BOOLEAN', ['VARCHAR'], 'nullptr']
+    # gin functions
+    [190000, 'tokenize', True, False, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'GinFunctions::tokenize', 'GinFunctions::tokenize_prepare', 'GinFunctions::tokenize_close']
 ]
