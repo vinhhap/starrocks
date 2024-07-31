@@ -51,7 +51,7 @@
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/exec_env.h"
-#include "storage/inverted/clucene/clucene_plugin.h"
+#include "storage/index/inverted/clucene/clucene_plugin.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
