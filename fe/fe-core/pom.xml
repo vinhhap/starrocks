@@ -37,7 +37,6 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
-        <jacoco.version>0.8.8</jacoco.version>
         <paimon.ali.dlf.version>1.0-ali-SNAPSHOT</paimon.ali.dlf.version>
         <python>python</python>
     </properties>
@@ -652,7 +651,7 @@ under the License.
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-bundle</artifactId>
-            <version>1.0-20241107.081339-27</version>
+            <version>${paimon.version}</version>
         </dependency>
 
         <dependency>
