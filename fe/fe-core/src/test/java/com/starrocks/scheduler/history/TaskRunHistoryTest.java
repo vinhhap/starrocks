@@ -209,6 +209,8 @@ public class TaskRunHistoryTest {
 
     @Test
     public void testHistoryVacuum(@Mocked RepoExecutor repo) {
+        Config.enable_task_history_archive = true;
+
         new MockUp<TableKeeper>() {
             @Mock
             public boolean isReady() {
