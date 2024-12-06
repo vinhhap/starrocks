@@ -278,7 +278,6 @@ public class JDBCTable extends Table {
         POSTGRES,
         ORACLE,
         MARIADB,
-
         CLICKHOUSE
     }
 }
