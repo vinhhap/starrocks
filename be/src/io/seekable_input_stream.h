@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/stream_type.h"
 #include "io/input_stream.h"
 
 namespace starrocks::io {
@@ -94,6 +95,8 @@ public:
     // when column_iterator get eos.
     virtual void try_release(){};
 
+    virtual void set_stream_item_type(StreamItemType type){};
+
 protected:
     std::string _filename = "";
 };
@@ -147,6 +150,8 @@ public:
     StatusOr<std::string> read_all() override { return _impl->read_all(); }
 
     bool is_encrypted() const override { return _impl->is_encrypted(); };
+
+    void set_stream_item_type(StreamItemType type) override { return _impl->set_stream_item_type(type); }
 
 private:
     SeekableInputStream* _impl;
