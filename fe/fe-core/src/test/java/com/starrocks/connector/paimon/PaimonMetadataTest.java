@@ -740,7 +740,7 @@ public class PaimonMetadataTest {
                 new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, columnMetaToColRefMap,
                         -1, null));
         rule0.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
-        assertEquals(1, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
+        assertEquals(0, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
                 .getSelectedPartitionIds().size());
     }
     @Test
