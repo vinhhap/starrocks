@@ -209,6 +209,7 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
             if (eos) {
                 // try release sharedBufferedStream advance
                 _opts.read_file->try_release();
+                break;
             }
         }
 
