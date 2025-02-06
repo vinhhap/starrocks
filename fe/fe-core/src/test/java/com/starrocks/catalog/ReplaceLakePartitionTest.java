@@ -27,8 +27,6 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -76,17 +74,10 @@ public class ReplaceLakePartitionTest {
             }
         };
 
-        GlobalStateMgr.getCurrentState().initDefaultWarehouse();
-
         new MockUp<GlobalStateMgr>() {
             @Mock
             public StarOSAgent getStarOSAgent() {
                 return starOSAgent;
-            }
-
-            @Mock
-            public WarehouseManager getWarehouseMgr() {
-                return warehouseManager;
             }
         };
 
@@ -101,13 +92,6 @@ public class ReplaceLakePartitionTest {
             @Mock
             public void logErasePartition(long partitionId) {
                 return;
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getBackgroundWarehouse() {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
         };
     }

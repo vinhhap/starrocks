@@ -29,7 +29,10 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.MockedWarehouseManager;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -46,6 +49,48 @@ public class CompactionSchedulerTest {
     private GlobalTransactionMgr globalTransactionMgr;
     @Mocked
     private DatabaseTransactionMgr dbTransactionMgr;
+
+    @Before
+    public void setUp() {
+    }
+
+    @Test
+    public void testBeginTransactionSucceedWithSmallerStreamLoadTimeout() {
+        long dbId = 9000L;
+        long transactionId = 12345L;
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+        new Expectations() {
+            {
+                try {
+                    dbTransactionMgr.beginTransaction(
+                            (List<Long>) any, anyString, (TUniqueId) any, (TransactionState.TxnCoordinator) any,
+                            (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong
+                    );
+                } catch (Exception e) {
+                    // skip
+                }
+                result = transactionId;
+            }
+        };
+
+        UtFrameUtils.mockInitWarehouseEnv();
+
+        // default value
+        Config.lake_compaction_default_timeout_second = 86400;
+        // value smaller than `lake_compaction_default_timeout_second`
+        // expect not affect lake compaction's  transaction operation
+        Config.max_stream_load_timeout_second = 64800;
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler compactionScheduler =
+                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "");
+        PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, 2, 3);
+        try {
+            assertEquals(transactionId, compactionScheduler.beginTransaction(partitionIdentifier));
+        } catch (Exception e) {
+            Assert.fail("Transaction failed for lake compaction");
+        }
+    }
 
     @Test
     public void testDisableTableCompaction() {
