@@ -159,8 +159,7 @@ public class CompactionScheduler extends Daemon {
 
                 if (errorMsg != null) {
                     iterator.remove();
-                    job.finish();
-                    history.offer(CompactionRecord.build(job, errorMsg));
+                    finishJob(job, errorMsg);
                     compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
                     abortTransactionIgnoreException(job, errorMsg);
                     continue;
@@ -168,8 +167,7 @@ public class CompactionScheduler extends Daemon {
             }
             if (job.transactionHasCommitted() && job.waitTransactionVisible(50, TimeUnit.MILLISECONDS)) {
                 iterator.remove();
-                job.finish();
-                history.offer(CompactionRecord.build(job));
+                finishJob(job, null);
                 long cost = job.getFinishTs() - job.getStartTs();
                 if (cost >= /*60 minutes=*/3600000) {
                     LOG.info("Removed published compaction. {} cost={}s running={}", job.getDebugString(),
@@ -219,6 +217,12 @@ public class CompactionScheduler extends Daemon {
                 job.abort();
             }
         }
+    }
+
+    private void finishJob(CompactionJob job, String errorMsg) {
+        job.finish();
+        history.offer(CompactionRecord.build(job, errorMsg));
+        LOG.info("Finished compaction job. partitionId={}, errorMsg={}", job.getPartition().getId(), errorMsg);
     }
 
     private void abortTransactionIgnoreException(CompactionJob job, String reason) {
@@ -332,8 +336,7 @@ public class CompactionScheduler extends Daemon {
             partition.setMinRetainVersion(0);
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
             abortTransactionIgnoreError(job, e.getMessage());
-            job.finish();
-            history.offer(CompactionRecord.build(job, e.getMessage()));
+            finishJob(job, e.getMessage());
             return null;
         } finally {
             compactionManager.enableCompactionAfter(partitionIdentifier, nextCompactionInterval);
