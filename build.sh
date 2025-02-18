@@ -395,6 +395,9 @@ if [ ${BUILD_BE} -eq 1 ] ; then
         WITH_COMPRESS=OFF
     fi
 
+    if [[ ! -z ${STARROCKS_GCC_HOME} ]]; then
+        export LD_LIBRARY_PATH="${STARROCKS_GCC_HOME}/lib:${STARROCKS_GCC_HOME}/lib64:${LD_LIBRARY_PATH}"
+    fi
 
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
@@ -585,15 +588,16 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/fluss-reader-lib
 
-	cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
-	cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop//
-	cp -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop//
+        cp -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
+        # paimon native sdk
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/lib/paimon ${STARROCKS_OUTPUT}/be/lib/
         # support zure & gcs 
         cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
         cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
         cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
     fi
-
     MSG="${MSG} √ ${MSG_BE}"
 fi
 
