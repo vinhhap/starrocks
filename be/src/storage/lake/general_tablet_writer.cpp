@@ -92,6 +92,7 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     if (_is_compaction) {
         wopts.op_type = OperationKind::COMPACTION;
     }
+    wopts.tablet_id = _tablet_id;
 
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
@@ -282,6 +283,7 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     if (_is_compaction) {
         wopts.op_type = OperationKind::COMPACTION;
     }
+    wopts.tablet_id = _tablet_id;
 
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);

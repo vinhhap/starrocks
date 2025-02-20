@@ -42,6 +42,7 @@
 #include "http/action/datacache_action.h"
 #include "http/action/greplog_action.h"
 #include "http/action/health_action.h"
+#include "http/action/lake/cache_stat_action.h"
 #include "http/action/lake/dump_tablet_metadata_action.h"
 #include "http/action/memory_metrics_action.h"
 #include "http/action/meta_action.h"
@@ -288,6 +289,11 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/api/cloudnative/dump_tablet_metadata/{TabletId}",
                                       lake_dump_metadata_action);
     _http_handlers.emplace_back(lake_dump_metadata_action);
+
+    auto* cache_stat_action = new lake::CacheStatAction(_env);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/cloudnative/cache/{action}", cache_stat_action);
+    _http_handlers.emplace_back(cache_stat_action);
+
 #endif
 
     RETURN_IF_ERROR(_ev_http_server->start());

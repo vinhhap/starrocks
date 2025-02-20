@@ -52,7 +52,8 @@ add_library(Webserver STATIC
   action/datacache_action.cpp
   action/pipeline_blocking_drivers_action.cpp
   action/lake/dump_tablet_metadata_action.cpp
-  action/stop_be_action.cpp)
+  action/stop_be_action.cpp
+  action/lake/cache_stat_action.cpp)
 
 # target_link_libraries(Webserver pthread dl Util)
 #ADD_BE_TEST(integer-array-test)
