@@ -422,6 +422,7 @@ public class ConnectProcessor {
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
                 Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
 
+                ctx.getSessionVariable().setPaimonNativeCommitUser(ctx.getCurrentUserIdentity().getUser());
                 executor = new StmtExecutor(ctx, parsedStmt);
                 ctx.setExecutor(executor);
 

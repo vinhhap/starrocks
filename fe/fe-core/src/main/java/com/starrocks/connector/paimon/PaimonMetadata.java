@@ -102,7 +102,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -846,7 +845,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             CommitMessageSerializer commitMessageSerializer = new CommitMessageSerializer();
 
             for (TPaimonCommitMessage tPaimonCommitMessage : commitMessageList) {
-                byte[] commitMessage = Base64.getDecoder().decode(tPaimonCommitMessage.getCommit_info_string_list());
+                byte[] commitMessage = tPaimonCommitMessage.getCommit_message();
                 ByteArrayInputStream bis = new ByteArrayInputStream(commitMessage);
                 List<CommitMessage> commitMessages = commitMessageSerializer.deserializeList(
                         commitMessageSerializer.getVersion(), new DataInputViewStreamWrapper(bis));
