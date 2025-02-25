@@ -31,6 +31,7 @@ set(EXEC_FILES
     fs_jindo.cpp
     fs_util.cpp
     fs_starlet.cpp
+    paimon/paimon_file_system.cpp
     )
 
 add_library(FileSystem STATIC
