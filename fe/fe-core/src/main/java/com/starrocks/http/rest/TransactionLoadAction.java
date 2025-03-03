@@ -65,6 +65,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.lang3.StringUtils;
@@ -226,19 +227,17 @@ public class TransactionLoadAction extends RestBaseAction {
         TNetworkAddress redirectAddress = result.getRedirectAddress();
         if (null == redirectAddress) {
             Long nodeId = getNodeId(txnOperation, label, txnOperationParams.getWarehouseName());
-            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(nodeId);
+            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
             if (node == null) {
-                node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(nodeId);
-                if (node == null) {
-                    throw new UserException("Node " + nodeId + " is not alive");
-                }
+                throw new UserException("Node " + nodeId + " is not alive");
             }
 
             redirectAddress = new TNetworkAddress(node.getHost(), node.getHttpPort());
         }
 
-        LOG.info("Redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}",
-                redirectAddress, txnOperationParams.getDbName(), txnOperationParams.getTableName(), txnOperation, label);
+        LOG.info("Redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}, warehouse: {}",
+                redirectAddress, txnOperationParams.getDbName(), txnOperationParams.getTableName(), txnOperation, label,
+                txnOperationParams.getWarehouseName());
         redirectTo(request, response, redirectAddress);
     }
 
@@ -287,7 +286,7 @@ public class TransactionLoadAction extends RestBaseAction {
             Long chosenNodeId = nodeIds.get(0);
             nodeId = chosenNodeId;
             // txnNodeMap is LRU cache, it atomic remove unused entry
-            accessTxnNodeMapWithWriteLock(txnNodeMap -> txnNodeMap.put(label, chosenNodeId));
+            accessTxnNodeMapWithWriteLock(txnNodeMap -> txnNodeMap.put(label, nodeId));
         } else {
             nodeId = accessTxnNodeMapWithReadLock(txnNodeMap -> txnNodeMap.get(label));
         }
