@@ -623,6 +623,7 @@ struct TRoutineLoadJobInfo {
     20: optional string latest_source_position
     21: optional string offset_lag
     22: optional string timestamp_progress
+    23: optional string warehouse
 }
 
 struct TGetStreamLoadsResult {
@@ -653,8 +654,9 @@ struct TStreamLoadInfo {
     21: string finish_preparing_time_ms,
     22: string end_time_ms,
     23: string channel_state,
-    24: string type
+    24: string type,
     25: string tracking_sql,
+    26: string warehouse
 
 }
 
