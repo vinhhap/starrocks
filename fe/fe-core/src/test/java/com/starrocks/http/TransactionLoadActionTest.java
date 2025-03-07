@@ -18,15 +18,19 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperation;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -63,10 +67,14 @@ import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.junit.runners.MethodSorters;
+import org.junit.runners.Parameterized;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -79,6 +87,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 @FixMethodOrder(MethodSorters.JVM)
+@RunWith(Parameterized.class)
 public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     private static final String OK = ActionStatus.OK.name();
@@ -95,20 +104,42 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     private static HttpServer beServer;
     private static int TEST_HTTP_PORT = 0;
 
+    public TransactionLoadActionTest(String mode) {
+        Config.run_mode = mode;
+        RunMode.detectRunMode();
+    }
+
+    @Parameterized.Parameters(name = "run mode = {0}")
+    public static Collection<String> parameters() {
+        return Arrays.asList(RunMode.SHARED_DATA.getName(), RunMode.SHARED_NOTHING.getName());
+    }
+
     @Mocked
     private StreamLoadMgr streamLoadMgr;
 
     @Mocked
     private GlobalTransactionMgr globalTransactionMgr;
 
+    @Mocked
+    private StarOSAgent starOSAgent;
+
     @Override
     protected void doSetUp() {
-        Backend backend4 = new Backend(1234, "localhost", 8040);
-        backend4.setBePort(9300);
-        backend4.setAlive(true);
-        backend4.setHttpPort(TEST_HTTP_PORT);
-        backend4.setDisks(new ImmutableMap.Builder<String, DiskInfo>().put("1", new DiskInfo("")).build());
-        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend4);
+        if (RunMode.isSharedNothingMode()) {
+            Backend backend4 = new Backend(1234, "localhost", 8040);
+            backend4.setBePort(9300);
+            backend4.setAlive(true);
+            backend4.setHttpPort(TEST_HTTP_PORT);
+            backend4.setDisks(new ImmutableMap.Builder<String, DiskInfo>().put("1", new DiskInfo("")).build());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend4);
+        } else {
+            ComputeNode computeNode = new ComputeNode(1234, "localhost", 8040);
+            computeNode.setBePort(9300);
+            computeNode.setAlive(true);
+            computeNode.setHttpPort(TEST_HTTP_PORT);
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
+        }
+
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -130,7 +161,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             }
 
         };
-
     }
 
     /**
@@ -320,6 +350,19 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
             reqBuilder.addHeader(LABEL_KEY, label);
         });
+
+        if (RunMode.isSharedDataMode()) {
+            new Expectations() {
+                {
+                    starOSAgent.getWorkersByWorkerGroup(anyLong);
+                    times = 1;
+                    List<Long> list = new ArrayList<>();
+                    list.add(1234L);
+                    result = list;
+                }
+            };
+        }
+
         try (Response response = networkClient.newCall(request).execute()) {
             Map<String, Object> body = parseResponseBody(response);
             assertEquals(OK, body.get(TransactionResult.STATUS_KEY));

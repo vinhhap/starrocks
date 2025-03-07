@@ -60,6 +60,7 @@ import com.starrocks.http.rest.transaction.TransactionWithoutChannelHandler;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
