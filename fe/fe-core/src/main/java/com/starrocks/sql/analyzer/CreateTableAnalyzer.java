@@ -44,7 +44,6 @@ import com.starrocks.connector.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -574,10 +573,6 @@ public class CreateTableAnalyzer {
         KeysDesc keysDesc = Preconditions.checkNotNull(stmt.getKeysDesc());
         if (keysDesc.getKeysType() == KeysType.AGG_KEYS) {
             throw new SemanticException("Generated Column does not support AGG table");
-        }
-
-        if (RunMode.isSharedDataMode()) {
-            throw new SemanticException("Does not support generated column in shared data cluster yet");
         }
 
         final TableName tableNameObject = stmt.getDbTbl();
