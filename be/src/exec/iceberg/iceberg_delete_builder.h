@@ -18,6 +18,8 @@
 
 #include "block_cache/cache_options.h"
 #include "common/status.h"
+#include "connector/deletion_vector/deletion_bitmap.h"
+#include "exec/hdfs_scanner.h"
 #include "exec/mor_processor.h"
 #include "exec/parquet_scanner.h"
 #include "fs/fs.h"
@@ -45,7 +47,7 @@ public:
     ~PositionDeleteBuilder() override = default;
 
     virtual Status build(const std::string& timezone, const std::string& file_path, int64_t file_length,
-                         std::set<int64_t>* need_skip_rowids) = 0;
+                         SkipRowsContextPtr skip_rows_ctx) = 0;
 };
 
 class EqualityDeleteBuilder : public DeleteBuilder {
@@ -93,37 +95,46 @@ private:
 
 class ORCPositionDeleteBuilder final : public PositionDeleteBuilder {
 public:
-    ORCPositionDeleteBuilder(FileSystem* fs, const DataCacheOptions& datacache_options, std::string datafile_path)
-            : PositionDeleteBuilder(fs, datacache_options), _datafile_path(std::move(datafile_path)) {}
+    ORCPositionDeleteBuilder(FileSystem* fs, const DataCacheOptions& datacache_options, std::string datafile_path,
+                             DeletionBitmapPtr deletion_bitmap)
+            : PositionDeleteBuilder(fs, datacache_options),
+              _datafile_path(std::move(datafile_path)),
+              _deletion_bitmap(deletion_bitmap) {}
     ~ORCPositionDeleteBuilder() override = default;
 
     Status build(const std::string& timezone, const std::string& delete_file_path, int64_t file_length,
-                 std::set<int64_t>* need_skip_rowids) override;
+                 SkipRowsContextPtr skip_rows_ctx) override;
 
 private:
     std::string _datafile_path;
+    DeletionBitmapPtr _deletion_bitmap;
 };
 
 class ParquetPositionDeleteBuilder final : public PositionDeleteBuilder {
 public:
-    ParquetPositionDeleteBuilder(FileSystem* fs, const DataCacheOptions& datacache_options, std::string datafile_path)
-            : PositionDeleteBuilder(fs, datacache_options), _datafile_path(std::move(datafile_path)) {}
+    ParquetPositionDeleteBuilder(FileSystem* fs, const DataCacheOptions& datacache_options, std::string datafile_path,
+                                 DeletionBitmapPtr deletion_bitmap)
+            : PositionDeleteBuilder(fs, datacache_options),
+              _datafile_path(std::move(datafile_path)),
+              _deletion_bitmap(deletion_bitmap) {}
     ~ParquetPositionDeleteBuilder() override = default;
 
     Status build(const std::string& timezone, const std::string& delete_file_path, int64_t file_length,
-                 std::set<int64_t>* need_skip_rowids) override;
+                 SkipRowsContextPtr skip_rows_ctx) override;
 
 private:
     std::string _datafile_path;
+    DeletionBitmapPtr _deletion_bitmap;
 };
 
 class IcebergDeleteBuilder {
 public:
-    IcebergDeleteBuilder(FileSystem* fs, std::string datafile_path, std::set<int64_t>* need_skip_rowids,
+    IcebergDeleteBuilder(FileSystem* fs, std::string datafile_path, SkipRowsContextPtr skip_rows_ctx,
                          const DataCacheOptions& datacache_options = DataCacheOptions())
             : _fs(fs),
               _datafile_path(std::move(datafile_path)),
-              _need_skip_rowids(need_skip_rowids),
+              _skip_rows_ctx(std::move(skip_rows_ctx)),
+              _deletion_bitmap(std::make_shared<DeletionBitmap>(roaring64_bitmap_create())),
               _datacache_options(datacache_options) {}
     ~IcebergDeleteBuilder() = default;
 
@@ -131,8 +142,8 @@ public:
                      const std::vector<SlotDescriptor*>& slots, RuntimeState* state,
                      std::shared_ptr<DefaultMORProcessor> mor_processor) const {
         if (delete_file.file_content == TIcebergFileContent::POSITION_DELETES) {
-            return ORCPositionDeleteBuilder(_fs, _datacache_options, _datafile_path)
-                    .build(timezone, delete_file.full_path, delete_file.length, _need_skip_rowids);
+            return ORCPositionDeleteBuilder(_fs, _datacache_options, _datafile_path, _deletion_bitmap)
+                    .build(timezone, delete_file.full_path, delete_file.length, _skip_rows_ctx);
         } else if (delete_file.file_content == TIcebergFileContent::EQUALITY_DELETES) {
             return ORCEqualityDeleteBuilder(_fs, _datacache_options, _datafile_path)
                     .build(timezone, delete_file.full_path, delete_file.length, std::move(mor_processor),
@@ -149,8 +160,8 @@ public:
                          const TIcebergSchema* iceberg_equal_delete_schema, RuntimeState* state,
                          std::shared_ptr<DefaultMORProcessor> mor_processor) const {
         if (delete_file.file_content == TIcebergFileContent::POSITION_DELETES) {
-            return ParquetPositionDeleteBuilder(_fs, _datacache_options, _datafile_path)
-                    .build(timezone, delete_file.full_path, delete_file.length, _need_skip_rowids);
+            return ParquetPositionDeleteBuilder(_fs, _datacache_options, _datafile_path, _deletion_bitmap)
+                    .build(timezone, delete_file.full_path, delete_file.length, _skip_rows_ctx);
         } else if (delete_file.file_content == TIcebergFileContent::EQUALITY_DELETES) {
             return ParquetEqualityDeleteBuilder(_fs, _datacache_options, _datafile_path)
                     .build(timezone, delete_file.full_path, delete_file.length, std::move(mor_processor),
@@ -165,7 +176,8 @@ public:
 private:
     FileSystem* _fs;
     std::string _datafile_path;
-    std::set<int64_t>* _need_skip_rowids;
+    SkipRowsContextPtr _skip_rows_ctx;
+    DeletionBitmapPtr _deletion_bitmap;
     const DataCacheOptions _datacache_options;
 };
 

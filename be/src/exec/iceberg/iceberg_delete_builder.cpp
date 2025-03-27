@@ -39,7 +39,7 @@ static const IcebergColumnMeta k_delete_file_pos{
         .id = INT32_MAX - 102, .col_name = "pos", .type = TPrimitiveType::BIGINT};
 
 Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
-                                           int64_t file_length, std::set<int64_t>* need_skip_rowids) {
+                                           int64_t file_length, SkipRowsContextPtr skip_rows_ctx) {
     std::vector<SlotDescriptor*> slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
                                                   &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
     auto iter = std::make_unique<IcebergDeleteFileIterator>();
@@ -58,11 +58,11 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
         ::arrow::Int64Array* pos_array = static_cast<arrow::Int64Array*>(batch->column(1).get());
         for (size_t row = 0; row < batch->num_rows(); row++) {
             if (file_path_array->Value(row) == _datafile_path) {
-                need_skip_rowids->emplace(pos_array->Value(row));
+                _deletion_bitmap->add_value(pos_array->Value(row));
             }
         }
     }
-
+    skip_rows_ctx->deletion_bitmap = _deletion_bitmap;
     // eof is expected, otherwise propagate error
     if (!status.is_end_of_file()) {
         LOG(WARNING) << status;
@@ -72,7 +72,7 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
 }
 
 Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
-                                       int64_t file_length, std::set<int64_t>* need_skip_rowids) {
+                                       int64_t file_length, SkipRowsContextPtr skip_rows_ctx) {
     std::vector<SlotDescriptor*> slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
                                                   &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
 
@@ -128,8 +128,9 @@ Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::s
             if (file_path_col->get_slice(row) != _datafile_path) {
                 continue;
             }
-            need_skip_rowids->emplace(position_col->get_data()[row]);
+            _deletion_bitmap->add_value(position_col->get_data()[row]);
         }
+        skip_rows_ctx->deletion_bitmap = _deletion_bitmap;
     }
 }
 

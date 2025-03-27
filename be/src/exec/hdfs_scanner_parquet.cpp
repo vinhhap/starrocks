@@ -28,7 +28,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
     if (!scanner_params.deletes.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
         std::unique_ptr<IcebergDeleteBuilder> iceberg_delete_builder(new IcebergDeleteBuilder(
-                scanner_params.fs, scanner_params.path, &_need_skip_rowids, scanner_params.datacache_options));
+                scanner_params.fs, scanner_params.path, _skip_rows_ctx, scanner_params.datacache_options));
         for (const auto& tdelete_file : scanner_params.deletes) {
             RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(
                     runtime_state->timezone(), *tdelete_file, scanner_params.mor_params.equality_slots,
@@ -38,7 +38,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
     } else if (scanner_params.paimon_deletion_file != nullptr) {
         std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
-                new PaimonDeleteFileBuilder(scanner_params.fs, &_need_skip_rowids));
+                new PaimonDeleteFileBuilder(scanner_params.fs, _skip_rows_ctx));
         RETURN_IF_ERROR(paimon_delete_file_builder->build(scanner_params.paimon_deletion_file.get()));
     }
     return Status::OK();
@@ -156,7 +156,7 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     // create file reader
     _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), _file->get_size().value(),
                                                     _scanner_params.datacache_options,
-                                                    _shared_buffered_input_stream.get(), &_need_skip_rowids);
+                                                    _shared_buffered_input_stream.get(), _skip_rows_ctx);
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     RETURN_IF_ERROR(_reader->init(&_scanner_ctx));
     return Status::OK();

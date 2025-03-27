@@ -48,15 +48,38 @@
 
 namespace starrocks::parquet {
 
+struct SplitContext : public HdfsSplitContext {
+    FileMetaDataPtr file_metadata;
+    SkipRowsContextPtr skip_rows_ctx;
+
+    HdfsSplitContextPtr clone() override {
+        auto ctx = std::make_unique<SplitContext>();
+        ctx->file_metadata = file_metadata;
+        ctx->skip_rows_ctx = skip_rows_ctx;
+        return ctx;
+    }
+};
+
+static int64_t _get_column_start_offset(const tparquet::ColumnMetaData& column) {
+    int64_t offset = column.data_page_offset;
+    if (column.__isset.index_page_offset) {
+        offset = std::min(offset, column.index_page_offset);
+    }
+    if (column.__isset.dictionary_page_offset) {
+        offset = std::min(offset, column.dictionary_page_offset);
+    }
+    return offset;
+}
+
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                        const DataCacheOptions& datacache_options, io::SharedBufferedInputStream* sb_stream,
-                       const std::set<int64_t>* _need_skip_rowids)
+                       SkipRowsContextPtr skip_rows_ctx)
         : _chunk_size(chunk_size),
           _file(file),
           _file_size(file_size),
           _datacache_options(datacache_options),
           _sb_stream(sb_stream),
-          _need_skip_rowids(_need_skip_rowids) {}
+          _skip_rows_ctx(std::move(skip_rows_ctx)) {}
 
 FileReader::~FileReader() = default;
 
@@ -151,6 +174,7 @@ Status FileReader::_build_split_tasks() {
         split_ctx->split_start = start_offset;
         split_ctx->split_end = end_offset;
         split_ctx->file_metadata = _file_metadata;
+        split_ctx->skip_rows_ctx = _skip_rows_ctx;
         _scanner_ctx->split_tasks.emplace_back(std::move(split_ctx));
     }
     _scanner_ctx->merge_split_tasks();
@@ -509,7 +533,7 @@ Status FileReader::_init_group_readers() {
         }
 
         auto row_group_reader =
-                std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
+                std::make_shared<GroupReader>(_group_reader_param, i, _skip_rows_ctx, row_group_first_row);
         RETURN_IF_ERROR(row_group_reader->init());
 
         // You should call row_group_reader->init() before _filter_group()
@@ -520,11 +544,11 @@ Status FileReader::_init_group_readers() {
 
         _row_group_readers.emplace_back(row_group_reader);
         int64_t num_rows = _file_metadata->t_metadata().row_groups[i].num_rows;
-        // for iceberg v2 pos delete
-        if (_need_skip_rowids != nullptr && !_need_skip_rowids->empty()) {
-            auto start_iter = _need_skip_rowids->lower_bound(row_group_first_row);
-            auto end_iter = _need_skip_rowids->upper_bound(row_group_first_row + num_rows - 1);
-            num_rows -= std::distance(start_iter, end_iter);
+        // for skip rows which already deleted
+        if (_skip_rows_ctx != nullptr && _skip_rows_ctx->has_skip_rows()) {
+            uint64_t deletion_rows = _skip_rows_ctx->deletion_bitmap->get_range_cardinality(
+                    row_group_first_row, row_group_first_row + num_rows);
+            num_rows -= deletion_rows;
         }
         _total_row_count += num_rows;
     }

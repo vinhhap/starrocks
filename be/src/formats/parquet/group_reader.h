@@ -26,6 +26,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exec/hdfs_scanner.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_read_order_ctx.h"
 #include "formats/parquet/column_reader.h"
@@ -98,7 +99,7 @@ class GroupReader {
     friend class PageIndexReader;
 
 public:
-    GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
+    GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                 int64_t row_group_first_row);
     ~GroupReader();
 
@@ -150,7 +151,7 @@ private:
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;
     int64_t _row_group_first_row = 0;
-    const std::set<int64_t>* _need_skip_rowids;
+    SkipRowsContextPtr _skip_rows_ctx;
     int64_t _raw_rows_read = 0;
 
     // column readers for column chunk in row group
