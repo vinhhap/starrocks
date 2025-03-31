@@ -115,6 +115,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public static final String HIVE_TABLE_COLUMN_TYPES = "hive.table.column.types";
 
     private String catalogName;
+    @SerializedName(value = "owner")
+    private String owner;
     @SerializedName(value = "dn")
     private String hiveDbName;
     @SerializedName(value = "tn")
@@ -149,11 +151,12 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         super(TableType.HIVE);
     }
 
-    public HiveTable(long id, String name, List<Column> fullSchema, String resourceName, String catalog,
+    public HiveTable(long id, String owner, String name, List<Column> fullSchema, String resourceName, String catalog,
                      String hiveDbName, String hiveTableName, String tableLocation, String comment, long createTime,
                      List<String> partColumnNames, List<String> dataColumnNames, Map<String, String> properties,
                      Map<String, String> serdeProperties, HiveStorageFormat storageFormat, HiveTableType hiveTableType) {
         super(id, name, TableType.HIVE, fullSchema);
+        this.owner = owner;
         this.resourceName = resourceName;
         this.catalogName = catalog;
         this.hiveDbName = hiveDbName;
@@ -188,6 +191,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     public String getHiveDbTable() {
         return String.format("%s.%s", hiveDbName, hiveTableName);
+    }
+
+    // todo: Perhaps all types of tables can use this field to extend the permission management system.
+    public String getOwner() {
+        return owner;
     }
 
     @Override
@@ -482,6 +490,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     public static class Builder {
         private long id;
+        private String owner = System.getenv("HADOOP_USER_NAME");
         private String tableName;
         private String catalogName;
         private String hiveDbName;
@@ -503,6 +512,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         public Builder setId(long id) {
             this.id = id;
+            return this;
+        }
+
+        public Builder setHiveTableOwner(String owner) {
+            this.owner = owner;
             return this;
         }
 
@@ -582,7 +596,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
 
         public HiveTable build() {
-            return new HiveTable(id, tableName, fullSchema, resourceName, catalogName, hiveDbName, hiveTableName,
+            return new HiveTable(id, owner, tableName, fullSchema, resourceName, catalogName, hiveDbName, hiveTableName,
                     tableLocation, comment, createTime, partitionColNames, dataColNames, properties, serdeProperties,
                     storageFormat, hiveTableType);
         }
