@@ -72,6 +72,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -1915,6 +1916,20 @@ public class AstToStringBuilder {
             createTableSql.append(String.join(", ", partitionNames)).append(")");
         }
 
+        if (table.isPaimonTable()) {
+            List<String> pk = ((PaimonTable) table).getNativeTable().primaryKeys();
+            if (!pk.isEmpty()) {
+                createTableSql.append("\nPRIMARY KEYS (");
+                for (int i = 0; i < pk.size(); i++) {
+                    createTableSql.append(pk.get(i));
+                    if (i < pk.size() - 1) {
+                        createTableSql.append(", ");
+                    }
+                }
+                createTableSql.append(")");
+            }
+        }
+
         // Location
         String location = null;
         if (table.isHiveTable() || table.isHudiTable()) {
@@ -1933,10 +1948,24 @@ public class AstToStringBuilder {
         }
 
         if (!Strings.isNullOrEmpty(location)) {
-            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
+            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\"");
         }
-
-        return createTableSql.toString();
+        if (table.isPaimonTable()) {
+            createTableSql.append(",\n");
+            Map<String, String> options = ((PaimonTable) table).getNativeTable().options();
+            boolean trunc = false;
+            for (Map.Entry<String, String> entry : options.entrySet()) {
+                if (!entry.getKey().equals("path")) {
+                    createTableSql.append(" \"").append(entry.getKey()).append("\" = ");
+                    createTableSql.append("\"").append(entry.getValue()).append("\",\n");
+                    trunc = true;
+                }
+                if (trunc) {
+                    createTableSql.setLength(createTableSql.length() - 2);
+                }
+            }
+        }
+        return createTableSql.append(");").toString();
     }
 
     public static String getExternalCatalogViewDdlStmt(ConnectorView view) {
