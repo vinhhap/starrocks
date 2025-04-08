@@ -59,18 +59,23 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.format.aliorc.AliOrcFileFormatFactory;
 import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.io.DataOutputViewStreamWrapper;
 import org.apache.paimon.rest.RESTToken;
 import org.apache.paimon.rest.RESTTokenFileIO;
 import org.apache.paimon.table.DataTable;
 import org.apache.paimon.table.Table;
 import org.apache.paimon.table.source.DataSplit;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DeletionFile;
 import org.apache.paimon.table.source.RawFile;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.utils.InstantiationUtil;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
@@ -93,6 +98,7 @@ public class PaimonScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
+    private boolean useNativeReader = false;
 
     public PaimonScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -142,8 +148,8 @@ public class PaimonScanNode extends ScanNode {
         return rowCount * rowSize;
     }
 
-    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit) {
-
+    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit)
+            throws IOException {
         this.processedTable();
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
@@ -163,8 +169,12 @@ public class PaimonScanNode extends ScanNode {
                     paimonTable.getDbName(), paimonTable.getTableName(), predicate);
             return;
         }
-
+        String fileFormat = this.paimonTable.getNativeTable().options().get(CoreOptions.FILE_FORMAT.key());
         boolean forceJNIReader = ConnectContext.get().getSessionVariable().getPaimonForceJNIReader();
+        boolean forceNativeReader = ConnectContext.get().getSessionVariable().getPaimonForceNativeReader();
+        if (forceNativeReader || AliOrcFileFormatFactory.IDENTIFIER.equals(fileFormat)) {
+            useNativeReader = true;
+        }
         Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
         for (Split split : splits) {
             if (split instanceof DataSplit) {
@@ -182,6 +192,9 @@ public class PaimonScanNode extends ScanNode {
                                 splitRawFileScanRangeLocations(rawFiles.get(i), null, dataSplit.mergedRowCount());
                             }
                         }
+                    } else if (useNativeReader){
+                        long totalFileLength = getTotalFileLength(dataSplit);
+                        addSplitScanRangeLocations(dataSplit, predicateInfo, totalFileLength);
                     } else {
                         long totalFileLength = getTotalFileLength(dataSplit);
                         addSplitScanRangeLocations(dataSplit, predicateInfo, totalFileLength);
@@ -342,7 +355,7 @@ public class PaimonScanNode extends ScanNode {
         scanRangeLocationsList.add(scanRangeLocations);
     }
 
-    public void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
+    public void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) throws IOException {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -356,6 +369,24 @@ public class PaimonScanNode extends ScanNode {
         if (split instanceof DataSplit) {
             DataSplit dataSplit = (DataSplit) split;
             hdfsScanRange.setRelative_path(String.valueOf(dataSplit.hashCode()));
+        }
+        if (useNativeReader) {
+            hdfsScanRange.setUse_paimon_jni_reader(false);
+            hdfsScanRange.setUse_paimon_native_reader(true);
+            if (split instanceof DataSplit) {
+                DataSplit dataSplit = (DataSplit) split;
+                try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                    dataSplit.serialize(new DataOutputViewStreamWrapper(out));
+                    hdfsScanRange.setPaimon_split_info_binary(out.toByteArray());
+                } catch (IOException e) {
+                    throw new IOException("Failed to serialize paimon split", e);
+                }
+            } else {
+                throw new RuntimeException("Unsupported split type: " + split.getClass().getName());
+            }
+            FileStoreTable nativeTable = (FileStoreTable) paimonTable.getNativeTable();
+            hdfsScanRange.setPaimon_table_path(nativeTable.location().toString());
+            hdfsScanRange.setPaimon_schema_id(nativeTable.schema().id());
         }
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
@@ -404,6 +435,11 @@ public class PaimonScanNode extends ScanNode {
         // TODO: support it in verbose
         if (detailLevel != VERBOSE) {
             output.append(prefix).append(String.format("cardinality=%s", cardinality));
+            output.append("\n");
+        }
+
+        if (useNativeReader) {
+            output.append(prefix).append(String.format("useNativeReader=%s", useNativeReader));
             output.append("\n");
         }
 
@@ -495,6 +531,10 @@ public class PaimonScanNode extends ScanNode {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
+    }
+
+    public boolean useNativeReader() {
+        return useNativeReader;
     }
 
     private static final Base64.Encoder BASE64_ENCODER =
