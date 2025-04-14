@@ -44,6 +44,7 @@ public class MockedWarehouseManager extends WarehouseManager {
 
     private Long computeNodeId = 1000L;
     private boolean throwUnknownWarehouseException = false;
+    private boolean warehouseExisted = true;
 
     public MockedWarehouseManager() {
         super();
@@ -142,5 +143,14 @@ public class MockedWarehouseManager extends WarehouseManager {
         if (computeNodes != null) {
             aliveComputeNodes.addAll(computeNodes);
         }
+    }
+
+    @Override
+    public boolean warehouseExists(long warehouseId) {
+        return warehouseExisted;
+    }
+
+    public void setWarehouseExisted(boolean warehouseExisted) {
+        this.warehouseExisted = warehouseExisted;
     }
 }

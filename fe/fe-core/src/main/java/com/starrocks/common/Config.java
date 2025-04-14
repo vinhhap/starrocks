@@ -2814,6 +2814,13 @@ public class Config extends ConfigBase {
             "will disable compaction.")
     public static int lake_compaction_max_tasks = -1;
 
+    /**
+     * EMR Serverless only
+     */
+    @ConfField(mutable = true, comment = "A parallelism factor used to decide max compaction tasks on each cn, " +
+            "only take effect when lake_compaction_max_tasks is set to -1")
+    public static int lake_compaction_max_parallelism_per_cn = 16;
+
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 20;
 
@@ -2848,6 +2855,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "True to start warehouse idle checker")
     public static boolean warehouse_idle_check_enable = false;
+
+    @ConfField(mutable = true)
+    public static boolean lake_enable_bind_compaction_with_load_warehouse = false;
 
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)

@@ -58,6 +58,7 @@ public class CompactionMgrTest {
         Config.lake_compaction_selector = "SimpleSelector";
         Config.lake_compaction_sorter = "RandomSorter";
         CompactionMgr compactionManager = new CompactionMgr();
+        long warehouseId = 0;
 
         PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
         PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
@@ -65,19 +66,19 @@ public class CompactionMgrTest {
         Set<Long> excludeTables = new HashSet<>();
         for (int i = 1; i <= Config.lake_compaction_simple_selector_threshold_versions - 1; i++) {
             compactionManager.handleLoadingFinished(partition1, i, System.currentTimeMillis(),
-                                                    Quantiles.compute(Lists.newArrayList(1d)));
+                    Quantiles.compute(Lists.newArrayList(1d)), warehouseId);
             compactionManager.handleLoadingFinished(partition2, i, System.currentTimeMillis(),
-                                                    Quantiles.compute(Lists.newArrayList(1d)));
+                    Quantiles.compute(Lists.newArrayList(1d)), warehouseId);
             Assert.assertEquals(0, compactionManager.choosePartitionsToCompact(excludeTables).size());
         }
         compactionManager.handleLoadingFinished(partition1, Config.lake_compaction_simple_selector_threshold_versions,
-                System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)));
+                System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)), warehouseId);
         List<PartitionStatisticsSnapshot> compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition1, compactionList.get(0).getPartition());
 
         compactionManager.handleLoadingFinished(partition2, Config.lake_compaction_simple_selector_threshold_versions,
-                System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)));
+                System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)), warehouseId);
 
         compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
         Assert.assertEquals(2, compactionList.size());
@@ -114,11 +115,11 @@ public class CompactionMgrTest {
 
         CompactionMgr compactionManager = new CompactionMgr();
         compactionManager.handleLoadingFinished(partition10, 1, System.currentTimeMillis(),
-                Quantiles.compute(Lists.newArrayList(100d)));
+                Quantiles.compute(Lists.newArrayList(100d)), -1L);
         compactionManager.handleLoadingFinished(partition11, 2, System.currentTimeMillis(),
-                Quantiles.compute(Lists.newArrayList(100d)));
+                Quantiles.compute(Lists.newArrayList(100d)), -1L);
         compactionManager.handleLoadingFinished(partition20, 3, System.currentTimeMillis(),
-                Quantiles.compute(Lists.newArrayList(100d)));
+                Quantiles.compute(Lists.newArrayList(100d)), -1L);
 
         // build active txn on table1
         long txnId = 10001L;
@@ -167,15 +168,16 @@ public class CompactionMgrTest {
         PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
         Assert.assertEquals(0, compactionMgr.getMaxCompactionScore(), delta);
 
+        long warehouseId = 0;
         compactionMgr.handleLoadingFinished(partition1, 2, System.currentTimeMillis(),
-                Quantiles.compute(Lists.newArrayList(1d)));
+                Quantiles.compute(Lists.newArrayList(1d)), warehouseId);
         Assert.assertEquals(1, compactionMgr.getMaxCompactionScore(), delta);
         compactionMgr.handleCompactionFinished(partition1, 3, System.currentTimeMillis(),
                 Quantiles.compute(Lists.newArrayList(2d)), 1234);
         Assert.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
 
         compactionMgr.handleLoadingFinished(partition2, 2, System.currentTimeMillis(),
-                Quantiles.compute(Lists.newArrayList(3d)));
+                Quantiles.compute(Lists.newArrayList(3d)), warehouseId);
         Assert.assertEquals(3, compactionMgr.getMaxCompactionScore(), delta);
 
         compactionMgr.removePartition(partition2);
@@ -187,9 +189,9 @@ public class CompactionMgrTest {
         CompactionMgr compactionManager = new CompactionMgr();
         PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
         compactionManager.handleLoadingFinished(partition, 1, System.currentTimeMillis(),
-                                                Quantiles.compute(Lists.newArrayList(1d)));
+                                                Quantiles.compute(Lists.newArrayList(1d)), -1L);
 
-        PartitionStatistics statistics = compactionManager.triggerManualCompaction(partition);
+        PartitionStatistics statistics = compactionManager.triggerManualCompaction(partition, -1);
         Assert.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, statistics.getPriority());
 
         Set<Long> excludeTables = new HashSet<>();
@@ -231,11 +233,11 @@ public class CompactionMgrTest {
         PartitionIdentifier partition3 = new PartitionIdentifier(1, 2, 5);
 
         compactionMgr.handleLoadingFinished(partition1, 2, System.currentTimeMillis(),
-                Quantiles.compute(Lists.newArrayList(1d)));
+                Quantiles.compute(Lists.newArrayList(1d)), -1L);
         compactionMgr.handleLoadingFinished(partition2, 3, System.currentTimeMillis(),
-                Quantiles.compute(Lists.newArrayList(2d)));
+                Quantiles.compute(Lists.newArrayList(2d)), -1L);
         compactionMgr.handleLoadingFinished(partition3, 4, System.currentTimeMillis(),
-                Quantiles.compute(Lists.newArrayList(3d)));
+                Quantiles.compute(Lists.newArrayList(3d)), -1L);
 
         Assert.assertEquals(3, compactionMgr.getPartitionStatsCount());
 
