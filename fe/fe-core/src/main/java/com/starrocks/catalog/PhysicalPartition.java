@@ -89,7 +89,7 @@ public interface PhysicalPartition {
     public long storageDataSize();
     // partition row count reported by be, but may be not accurate
     public long storageRowCount();
-    // partition replica count, it's accurate 
+    // partition replica count, it's accurate
     public long storageReplicaCount();
     // has data judge by fe version, it's accurate
     public boolean hasStorageData();
@@ -103,5 +103,7 @@ public interface PhysicalPartition {
     public void setLastVacuumTime(long lastVacuumTime);
     public long getLastSuccVacuumVersion();
     public void setLastSuccVacuumVersion(long lastSuccVacuumVersion);
-
+    public long getExtraFileSize();
+    public void setExtraFileSize(long extraFileSize);
+    public void incExtraFileSize(long addFileSize);
 }
