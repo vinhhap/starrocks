@@ -2055,6 +2055,9 @@ Status SegmentIterator::_apply_inverted_index() {
                 Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap);
                 if (res.ok()) {
                     erased_preds.emplace_back(pred);
+                } else {
+                    LOG(WARNING) << "Failed to seek inverted index for column " << column_name
+                                 << ", reason: " << res.detailed_message();
                 }
             }
         }
