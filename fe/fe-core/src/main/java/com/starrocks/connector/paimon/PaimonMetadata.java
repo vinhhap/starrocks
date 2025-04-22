@@ -242,8 +242,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         Map<String, String> partitionMap = new HashMap<>();
         partitionMap.put("dummy", partitionName);
         try {
-            paimonNativeCatalog.dropPartition(new Identifier(db.getOriginName(), table.getName()), partitionMap);
-        } catch (Catalog.TableNotExistException | Catalog.PartitionNotExistException e) {
+            paimonNativeCatalog.dropPartitions(new Identifier(db.getOriginName(), table.getName()), List.of(partitionMap));
+        } catch (Catalog.TableNotExistException e) {
             throw new DdlException("Paimon error: " + e.getMessage());
         }
     }
@@ -403,8 +403,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         PaimonTable paimonTable = (PaimonTable) table;
         long latestSnapshotId = -1L;
         try {
-            if (paimonTable.getNativeTable().latestSnapshotId().isPresent()) {
-                latestSnapshotId = paimonTable.getNativeTable().latestSnapshotId().getAsLong();
+            if (paimonTable.getNativeTable().latestSnapshot().isPresent()) {
+                latestSnapshotId = paimonTable.getNativeTable().latestSnapshot().get().id();
             }
         } catch (Exception e) {
             // System table does not have snapshotId, ignore it.

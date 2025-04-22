@@ -127,6 +127,9 @@ public class CatalogMgr {
                     } else if (properties.get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
                             && properties.get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("dlf-paimon")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new DlfAccessController(properties));
+                    } else if (properties.get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
+                            && properties.get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("rest")) {
+                        // dlf 2.5 server will check, do nothing
                     } else {
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                     }
@@ -354,6 +357,9 @@ public class CatalogMgr {
                 } else if (properties.get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
                         && properties.get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("dlf-paimon")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new DlfAccessController(properties));
+                } else if (properties.get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
+                        && properties.get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("rest")) {
+                    // dlf 2.5 server will check, do nothing
                 } else {
                     Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                 }
