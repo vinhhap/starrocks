@@ -52,6 +52,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.BlankAccessController;
 import com.starrocks.privilege.DlfAccessController;
 import com.starrocks.privilege.NativeAccessController;
 import com.starrocks.privilege.ranger.hive.RangerHiveAccessController;
@@ -130,6 +131,7 @@ public class CatalogMgr {
                     } else if (properties.get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
                             && properties.get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("rest")) {
                         // dlf 2.5 server will check, do nothing
+                        Authorizer.getInstance().setAccessControl(catalogName, new BlankAccessController());
                     } else {
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                     }
@@ -360,6 +362,7 @@ public class CatalogMgr {
                 } else if (properties.get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
                         && properties.get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("rest")) {
                     // dlf 2.5 server will check, do nothing
+                    Authorizer.getInstance().setAccessControl(catalogName, new BlankAccessController());
                 } else {
                     Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                 }
