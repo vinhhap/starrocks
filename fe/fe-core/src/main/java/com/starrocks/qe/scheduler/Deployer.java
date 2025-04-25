@@ -22,6 +22,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
@@ -67,6 +68,7 @@ public class Deployer {
     private final TFragmentInstanceFactory tFragmentInstanceFactory;
     private final TDescriptorTable emptyDescTable;
     private final long deliveryTimeoutMs;
+    private final boolean enableDescTableCache;
     private boolean enablePlanSerializeConcurrently;
 
     private final FailureHandler failureHandler;
@@ -94,6 +96,7 @@ public class Deployer {
         this.failureHandler = failureHandler;
         this.needDeploy = needDeploy;
         this.enablePlanSerializeConcurrently = context.getSessionVariable().getEnablePlanSerializeConcurrently();
+        this.enableDescTableCache = context.getSessionVariable().isEnableDescTableCache();
     }
 
     public DeployState createFragmentExecStates(List<ExecutionFragment> concurrentFragments) {
@@ -204,10 +207,16 @@ public class Deployer {
             }
 
             TDescriptorTable curDescTable;
-            if (stageIndex < 2) {
-                curDescTable = jobSpec.getDescTable();
+            if (enableDescTableCache) {
+                if (stageIndex < 2) {
+                    curDescTable = jobSpec.getDescTable();
+                } else {
+                    curDescTable = emptyDescTable;
+                }
             } else {
-                curDescTable = emptyDescTable;
+                LOG.debug("Desc table cache has been disabled for query: {}, fragment: {}",
+                        DebugUtil.printId(jobSpec.getQueryId()), fragment.getFragmentId());
+                curDescTable = jobSpec.getDescTable();
             }
 
             for (FragmentInstance instance : stageInstances) {
