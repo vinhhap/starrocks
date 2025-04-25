@@ -114,20 +114,17 @@ public class WarehouseManagerEPack extends WarehouseManager {
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
         checkWarehouseState(warehouse);
+        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
         try {
-            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
-
-            Long nodeId;
             Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(shardInfo, true);
+                    .getAllNodeIdsInWorkerGroupByShard(tablet.getShardId(), workerGroupId, true);
             if (!ids.isEmpty()) {
-                nodeId = ids.iterator().next();
-                return nodeId;
+                return ids.iterator().next();
             } else {
                 return null;
             }
-        } catch (StarClientException e) {
+        } catch (UserException e) {
+            LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
             return null;
         }
     }
@@ -159,12 +156,11 @@ public class WarehouseManagerEPack extends WarehouseManager {
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
         checkWarehouseState(warehouse);
         try {
-            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
-
+            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(shardInfo, true);
-        } catch (StarClientException e) {
+                    .getAllNodeIdsInWorkerGroupByShard(tablet.getShardId(), workerGroupId, true);
+        } catch (UserException e) {
+            LOG.warn("Fail to get all compute node ids assigned to tablet {}, {}", tablet.getId(), e.getMessage());
             return null;
         }
     }
