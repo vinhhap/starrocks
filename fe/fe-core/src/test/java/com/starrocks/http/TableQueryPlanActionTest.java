@@ -35,6 +35,7 @@
 package com.starrocks.http;
 
 import com.starrocks.rpc.ConfigurableSerDesFactory;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TQueryPlanInfo;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -54,6 +55,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
 
     private static final String PATH_URI = "/_query_plan";
     protected static String ES_TABLE_URL;
+    protected static String WAREHOUSE_KEY = "warehouse";
 
     @Override
     @Before
@@ -70,6 +72,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
         Request request = new Request.Builder()
                 .post(body)
                 .addHeader("Authorization", rootAuth)
+                .addHeader(WAREHOUSE_KEY,  WarehouseManager.DEFAULT_WAREHOUSE_NAME)
                 .url(URI + PATH_URI)
                 .build();
         try (Response response = networkClient.newCall(request).execute()) {
