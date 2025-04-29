@@ -21,8 +21,11 @@ import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreType;
+import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaInfoSnapshot;
 import com.staros.proto.ReplicaInfoSnapshotList;
+import com.staros.proto.ReplicaRole;
+import com.staros.proto.ShardInfo;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
@@ -75,6 +78,15 @@ public class StarOSAgent2ndTest {
                 .putWorkerProperties("be_brpc_port", "8060")
                 .build();
 
+        ReplicaInfo replica = ReplicaInfo.newBuilder()
+                .setReplicaRole(ReplicaRole.PRIMARY)
+                .setWorkerInfo(workerInfo.toBuilder().build())
+                .build();
+
+        ShardInfo shardInfo = ShardInfo.newBuilder().setShardId(shardId)
+                .addReplicaInfo(replica)
+                .build();
+
         WorkerGroupDetailInfo wgDetailInfo = WorkerGroupDetailInfo.newBuilder()
                 .addWorkersInfo(workerInfo.toBuilder().build())
                 .build();
@@ -86,6 +98,10 @@ public class StarOSAgent2ndTest {
 
         new Expectations() {
             {
+                client.getShardInfo("1", Lists.newArrayList(shardId), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                minTimes = 0;
+                result = Lists.newArrayList(shardInfo);
+
                 client.getReplicaWorkerInfoSnapshotList(serviceId, Lists.newArrayList(shardId),
                         StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 minTimes = 0;
@@ -187,6 +203,14 @@ public class StarOSAgent2ndTest {
         long workerId = 1L;
         long beId = 2L;
 
+        WorkerInfo workerInfo = WorkerInfo.newBuilder()
+                .setIpPort(String.format("%s:%d", workerHost, workerStarletPort))
+                .setWorkerId(workerId)
+                .setWorkerState(WorkerState.ON)
+                .putWorkerProperties("be_heartbeat_port", String.valueOf(workerHeartbeatPort))
+                .putWorkerProperties("be_brpc_port", "8060")
+                .build();
+
         UtFrameUtils.mockInitWarehouseEnv();
 
         ReplicaInfoSnapshot replicaSnapshot =
@@ -194,6 +218,7 @@ public class StarOSAgent2ndTest {
         List<ReplicaInfoSnapshotList> shardInfoList =
                 Lists.newArrayList(ReplicaInfoSnapshotList.newBuilder().addReplicaSnapshot(replicaSnapshot).build());
 
+        Deencapsulation.setField(starosAgent, "serviceId", serviceId);
         new Expectations() {
             {
                 client.getReplicaWorkerInfoSnapshotList(serviceId, Lists.newArrayList(shardId),
@@ -203,12 +228,6 @@ public class StarOSAgent2ndTest {
             }
         };
 
-        Deencapsulation.setField(starosAgent, "serviceId", serviceId);
-
-        Assert.assertEquals(2, starosAgent.getPrimaryComputeNodeIdByShard(shardId));
-        UserException exception =
-                Assert.assertThrows(UserException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId));
-        Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getErrorCode());
         // get from workerToNode
         {
             Map<Long, Long> workerToNode = Maps.newHashMap();
@@ -220,14 +239,6 @@ public class StarOSAgent2ndTest {
 
         // no workerToNode yet, workInfo comes from staros, and port matches
         {
-            WorkerInfo workerInfo = WorkerInfo.newBuilder()
-                    .setIpPort(String.format("%s:%d", workerHost, workerStarletPort))
-                    .setWorkerId(workerId)
-                    .setWorkerState(WorkerState.ON)
-                    .putWorkerProperties("be_heartbeat_port", String.valueOf(workerHeartbeatPort))
-                    .putWorkerProperties("be_brpc_port", "8060")
-                    .build();
-
             Backend backend = new Backend(beId, workerHost, workerHeartbeatPort);
             backend.setStarletPort(workerStarletPort);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
@@ -320,7 +331,7 @@ public class StarOSAgent2ndTest {
                 }
             };
             Deencapsulation.setField(starosAgent, "workerToNode", Maps.newHashMap());
-            exception = Assert.assertThrows(UserException.class,
+            UserException exception = Assert.assertThrows(UserException.class,
                     () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId,
                             StarOSAgent.DEFAULT_WORKER_GROUP_ID));
             Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getErrorCode());

@@ -17,7 +17,6 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.CreateShardGroupInfo;
@@ -26,8 +25,6 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
-import com.staros.proto.ReplicaInfo;
-import com.staros.proto.ReplicaRole;
 import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
@@ -35,7 +32,6 @@ import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
-import com.staros.proto.WorkerState;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -385,83 +381,6 @@ public class StarOSAgentTest {
 
         // test delete shard group
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.deleteShardGroup(Lists.newArrayList(1L, 2L)));
-    }
-
-    @Test
-    public void testGetBackendByShard() throws StarClientException, UserException {
-        ReplicaInfo replica1 = ReplicaInfo.newBuilder()
-                .setReplicaRole(ReplicaRole.PRIMARY)
-                .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(1L).setWorkerState(WorkerState.ON).build())
-                .build();
-        ReplicaInfo replica2 = ReplicaInfo.newBuilder()
-                .setReplicaRole(ReplicaRole.SECONDARY)
-                .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(2L).setWorkerState(WorkerState.ON).build())
-                .build();
-        ReplicaInfo replica3 = ReplicaInfo.newBuilder()
-                .setReplicaRole(ReplicaRole.SECONDARY)
-                .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(3L).setWorkerState(WorkerState.OFF).build())
-                .build();
-        List<ReplicaInfo> replicas = Lists.newArrayList(replica1, replica2, replica3);
-
-        ShardInfo shard = ShardInfo.newBuilder().setShardId(10L).addAllReplicaInfo(replicas).build();
-        List<ShardInfo> shards = Lists.newArrayList(shard);
-
-        /*
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public SystemInfoService getCurrentState().getNodeMgr().getClusterInfo() {
-                return service;
-            }
-        };
-
-         */
-
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public long getBackendIdWithStarletPort(String host, int starletPort) {
-                return -1L;
-            }
-
-            @Mock
-            public long getComputeNodeIdWithStarletPort(String host, int starletPort) {
-                return -1L;
-            }
-        };
-
-        new MockUp<WorkerInfo>() {
-            @Mock
-            public String getIpPort() {
-                return "127.0.0.1:8090";
-            }
-        };
-
-        new Expectations() {
-            {
-                client.getShardInfo("1", Lists.newArrayList(10L), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-                minTimes = 0;
-                result = shards;
-            }
-        };
-
-        Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Map<Long, Long> workerToNode = Maps.newHashMap();
-        Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
-
-        ExceptionChecker.expectThrowsWithMsg(UserException.class,
-                "Failed to get primary backend. shard id: 10",
-                () -> starosAgent.getPrimaryComputeNodeIdByShard(10L));
-
-        Assert.assertEquals(Sets.newHashSet(), getBackendIdsByShard(10L, 0));
-
-        workerToNode.put(1L, 10001L);
-        workerToNode.put(2L, 10002L);
-        workerToNode.put(3L, 10003L);
-        Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
-
-        Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L));
-        Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L),
-                getBackendIdsByShard(10L, 0));
     }
 
     @Test
