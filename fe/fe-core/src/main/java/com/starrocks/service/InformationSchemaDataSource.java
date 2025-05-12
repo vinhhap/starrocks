@@ -45,6 +45,7 @@ import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
@@ -89,6 +90,17 @@ public class InformationSchemaDataSource {
 
     @NotNull
     private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
+        UserIdentity currentUser;
+        if (authInfo.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
+        } else {
+            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
+        }
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setQualifiedUser(currentUser.getUser());
+        ctx.setCurrentUserIdentity(currentUser);
+        ctx.setThreadLocalInfo();
+
         List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
         boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
@@ -110,12 +122,6 @@ public class InformationSchemaDataSource {
         List<String> dbNames = metadataMgr.listDbNames(catalogName);
         LOG.debug("get db names: {}", dbNames);
 
-        UserIdentity currentUser;
-        if (authInfo.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
-        }
         for (String fullName : dbNames) {
 
             try {
