@@ -59,7 +59,9 @@ public class PaimonTablePartitionsProcDir extends PartitionsProcDir {
                 .getPartitions(table.getCatalogName(), table, listPartitionNames);
 
         for (PartitionInfo partitionInfo : tblPartitionInfo) {
-            partitionInfos.add(getPartitionInfo(partitionInfo));
+            if (partitionInfo != null) {
+                partitionInfos.add(getPartitionInfo(partitionInfo));
+            }
         }
         return partitionInfos;
     }
