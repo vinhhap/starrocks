@@ -206,7 +206,7 @@ public class CatalogMgr {
                     } else if (alterProperties.get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
                             && alterProperties.get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("dlf-paimon")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new DlfAccessController(alterProperties));
-                    }else {
+                    } else {
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                     }
                 } else {

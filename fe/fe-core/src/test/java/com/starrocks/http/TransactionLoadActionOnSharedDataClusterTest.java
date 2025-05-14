@@ -30,10 +30,9 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.runners.Parameterized;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertTrue;

@@ -198,6 +198,27 @@ public class PaimonMetadataTest {
     }
 
     @Test
+    public void testGetSystemTable(@Mocked ManifestsTable paimonSystemTable,
+                                   @Mocked ReadBuilder readBuilder,
+                                   @Mocked InnerTableScan scan) throws Exception {
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = paimonSystemTable;
+                paimonSystemTable.newReadBuilder();
+                result = readBuilder;
+                readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan();
+                result = scan;
+            }
+        };
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1$manifests");
+        List<String> requiredNames = Lists.newArrayList("file_name", "file_size");
+        List<RemoteFileInfo> result =
+                metadata.getRemoteFileInfos(paimonTable, null, -1, null, requiredNames, -1);
+        Assert.assertEquals(1, result.size());
+    }
+
+    @Test
     public void testGetDatabaseDoesNotExist() throws Exception {
         String dbName = "nonexistentDb";
         new Expectations() {
@@ -224,7 +245,7 @@ public class PaimonMetadataTest {
     public void testListPartitionNames(@Mocked FileStoreTable mockPaimonTable,
                                        @Mocked PartitionsTable mockPartitionTable,
                                        @Mocked RecordReader<InternalRow> mockRecordReader)
-            throws Catalog.TableNotExistException, IOException {
+            throws Catalog.TableNotExistException {
 
         RowType tblRowType = RowType.of(
                 new DataType[] {
@@ -280,29 +301,6 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testGetSystemTable(@Mocked ManifestsTable paimonSystemTable,
-                                   @Mocked ReadBuilder readBuilder,
-                                   @Mocked InnerTableScan scan) throws Exception {
-        new Expectations() {
-            {
-                paimonNativeCatalog.getTable((Identifier) any);
-                result = paimonSystemTable;
-                paimonSystemTable.latestSnapshotId();
-                result = new Exception("Readonly Table tbl1$manifests does not support currentSnapshot.");
-                paimonSystemTable.newReadBuilder();
-                result = readBuilder;
-                readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan();
-                result = scan;
-            }
-        };
-        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1$manifests");
-        List<String> requiredNames = Lists.newArrayList("file_name", "file_size");
-        List<RemoteFileInfo> result =
-                metadata.getRemoteFileInfos(paimonTable, null, -1, null, requiredNames, -1);
-        Assert.assertEquals(1, result.size());
-    }
-
-    @Test
     public void testListPartitionNames(@Mocked FileStoreTable mockPaimonTable)
             throws Catalog.TableNotExistException {
         List<String> partitionNames = Lists.newArrayList("year", "month");
@@ -313,9 +311,9 @@ public class PaimonMetadataTest {
                 ));
         Identifier tblIdentifier = new Identifier("db1", "tbl1");
         org.apache.paimon.partition.Partition partition1 = new Partition(Map.of("year", "2020", "month", "1"),
-                100L, 1L, 1L, 1741327322000L);
+                100L, 1L, 1L, 1741327322000L, true);
         org.apache.paimon.partition.Partition partition2 = new Partition(Map.of("year", "2020", "month", "2"),
-                100L, 1L, 1L, 1741327322000L);
+                100L, 1L, 1L, 1741327322000L, true);
 
         new Expectations() {
             {

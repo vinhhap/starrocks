@@ -37,10 +37,12 @@ namespace starrocks::parquet {
 
 struct SplitContext : public HdfsSplitContext {
     FileMetaDataPtr file_metadata;
+    SkipRowsContextPtr skip_rows_ctx;
 
     HdfsSplitContextPtr clone() override {
         auto ctx = std::make_unique<SplitContext>();
         ctx->file_metadata = file_metadata;
+        ctx->skip_rows_ctx = skip_rows_ctx;
         return ctx;
     }
 };

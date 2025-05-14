@@ -245,8 +245,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         response->mutable_compaction_scores()->insert({tablet_id, score});
                         LOG(INFO) << "Publish version successfully tablet_id: " << tablet_id
                                   << " txn_ids=" << JoinMapped(txns, txn_info_string, ";")
-                                  << " base_version: " << base_version
-                                  << " new_version: " << new_version;
+                                  << " base_version: " << base_version << " new_version: " << new_version;
                     } else {
                         g_publish_version_failed_tasks << 1;
                         if (res.status().is_resource_busy()) {

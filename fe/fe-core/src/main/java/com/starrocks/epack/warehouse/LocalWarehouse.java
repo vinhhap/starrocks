@@ -164,6 +164,11 @@ public class LocalWarehouse extends Warehouse {
     }
 
     @Override
+    public long getResumeTime() {
+        return -1L;
+    }
+
+    @Override
     public Long getAnyWorkerGroupId() {
         return getAnyAvailableCluster().getWorkerGroupId();
     }

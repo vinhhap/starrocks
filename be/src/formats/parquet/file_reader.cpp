@@ -48,29 +48,6 @@
 
 namespace starrocks::parquet {
 
-struct SplitContext : public HdfsSplitContext {
-    FileMetaDataPtr file_metadata;
-    SkipRowsContextPtr skip_rows_ctx;
-
-    HdfsSplitContextPtr clone() override {
-        auto ctx = std::make_unique<SplitContext>();
-        ctx->file_metadata = file_metadata;
-        ctx->skip_rows_ctx = skip_rows_ctx;
-        return ctx;
-    }
-};
-
-static int64_t _get_column_start_offset(const tparquet::ColumnMetaData& column) {
-    int64_t offset = column.data_page_offset;
-    if (column.__isset.index_page_offset) {
-        offset = std::min(offset, column.index_page_offset);
-    }
-    if (column.__isset.dictionary_page_offset) {
-        offset = std::min(offset, column.dictionary_page_offset);
-    }
-    return offset;
-}
-
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                        const DataCacheOptions& datacache_options, io::SharedBufferedInputStream* sb_stream,
                        SkipRowsContextPtr skip_rows_ctx)
