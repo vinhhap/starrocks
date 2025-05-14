@@ -1049,6 +1049,7 @@ CONF_Int32(starlet_s3_client_max_cache_capacity, "8");
 CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
 // whether turn on read prefetch feature
 CONF_mBool(starlet_fs_read_prefetch_enable, "false");
+CONF_mBool(starlet_s3_use_poco_http_client, "false");
 // prefetch threadpool size
 CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");

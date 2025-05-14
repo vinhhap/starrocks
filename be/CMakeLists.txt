@@ -495,6 +495,11 @@ if ("${USE_STAROS}" STREQUAL "ON")
     set(absl_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
     find_package(absl CONFIG REQUIRED)
 
+    set(Poco_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/Poco" CACHE PATH "Poco search path")
+    find_package(Poco REQUIRED COMPONENTS Net NetSSL)
+    get_target_property(Poco_INCLUDE_DIR Poco::Net INTERFACE_INCLUDE_DIRECTORIES)
+    include_directories(${Poco_INCLUDE_DIR})
+
     # required by azure-*
     set(LIBXML2_INCLUDE_DIR "${STARLET_INSTALL_DIR}/third_party/include/libxml2" CACHE PATH "libxml2 include path")
     set(LIBXML2_LIBRARY "${STARLET_INSTALL_DIR}/third_party/lib/libxml2.a" CACHE FILEPATH "libxml2 static library")

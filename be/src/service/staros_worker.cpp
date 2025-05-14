@@ -70,6 +70,8 @@ DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 DECLARE_bool(fs_enable_buffer_prefetch);
 // starmgr grpc client deadline in milliseconds
 DECLARE_int32(starmgr_client_rpc_timeout_ms);
+// enable use poco http client
+DECLARE_bool(enable_poco_http_client);
 
 namespace starrocks {
 
@@ -439,6 +441,7 @@ void init_staros_worker() {
     }
     // skip staros reinit aws sdk
     staros::starlet::fslib::skip_aws_init_api = true;
+    staros::starlet::fslib::enable_poco_http_client = config::starlet_s3_use_poco_http_client;
 
     staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_threadpool_size",
                                                           std::to_string(config::starlet_cache_thread_num));
