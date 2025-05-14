@@ -206,6 +206,10 @@ public class CatalogMgr {
                     } else if (alterProperties.get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
                             && alterProperties.get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("dlf-paimon")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new DlfAccessController(alterProperties));
+                    } else if (alterProperties.get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
+                            && alterProperties.get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("rest")) {
+                        // dlf 2.5 server will check, do nothing
+                        Authorizer.getInstance().setAccessControl(catalogName, new BlankAccessController());
                     } else {
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                     }
