@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -310,18 +311,30 @@ public class OptExternalPartitionPruner {
 
                 // get partition names
                 List<String> partitionNames;
-                // check if the partition predicate could be used for filter partition names
-                List<Optional<ScalarOperator>> effectivePartitionPredicate =
-                        getEffectivePartitionPredicate(operator, partitionColumns, operator.getPredicate());
-                if (effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)) {
-                    List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
-                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .listPartitionNamesByValue(hmsTable.getCatalogName(), hmsTable.getDbName(),
-                                    hmsTable.getTableName(), partitionValues);
-                } else {
+                Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(hmsTable.getCatalogName());
+                if (catalog == null) {
+                    throw new AnalysisException("Catalog is not found: " + hmsTable.getCatalogName());
+                }
+                // DLF is very slow if partitionValues is large
+                if (catalog.getConfig().get("hive.metastore.type") != null &&
+                        catalog.getConfig().get("hive.metastore.type").equalsIgnoreCase("DLF")) {
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(),
                                     hmsTable.getTableName());
+                } else {
+                    // check if the partition predicate could be used for filter partition names
+                    List<Optional<ScalarOperator>> effectivePartitionPredicate =
+                            getEffectivePartitionPredicate(operator, partitionColumns, operator.getPredicate());
+                    if (effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)) {
+                        List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
+                        partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                                .listPartitionNamesByValue(hmsTable.getCatalogName(), hmsTable.getDbName(),
+                                        hmsTable.getTableName(), partitionValues);
+                    } else {
+                        partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                                .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(),
+                                        hmsTable.getTableName());
+                    }
                 }
 
                 List<PartitionKey> keys = new ArrayList<>();
