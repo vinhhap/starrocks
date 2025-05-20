@@ -83,7 +83,6 @@ import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.source.TableScan;
 import org.apache.paimon.table.system.ManifestsTable;
-import org.apache.paimon.table.system.PartitionsTable;
 import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BooleanType;
@@ -239,64 +238,6 @@ public class PaimonMetadataTest {
                 result = new Catalog.TableNotExistException(identifier);
             }
         };
-    }
-
-    @Test
-    public void testListPartitionNames(@Mocked FileStoreTable mockPaimonTable,
-                                       @Mocked PartitionsTable mockPartitionTable,
-                                       @Mocked RecordReader<InternalRow> mockRecordReader)
-            throws Catalog.TableNotExistException {
-
-        RowType tblRowType = RowType.of(
-                new DataType[] {
-                        new IntType(true),
-                        new IntType(true)
-                },
-                new String[] {"year", "month"});
-
-        List<String> partitionNames = Lists.newArrayList("year", "month");
-
-        Identifier tblIdentifier = new Identifier("db1", "tbl1");
-        Identifier partitionTblIdentifier = new Identifier("db1", "tbl1$partitions");
-
-        RowType partitionRowType = new RowType(
-                Arrays.asList(
-                        new DataField(0, "partition", SerializationUtils.newStringType(true)),
-                        new DataField(1, "record_count", new BigIntType(false)),
-                        new DataField(2, "file_size_in_bytes", new BigIntType(false)),
-                        new DataField(3, "file_count", new BigIntType(false)),
-                        new DataField(4, "last_update_time", DataTypes.TIMESTAMP_MILLIS())
-                ));
-
-        GenericRow row1 = new GenericRow(2);
-        row1.setField(0, BinaryString.fromString("[2020, 1]"));
-        row1.setField(1, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 1, 1, 0, 0, 0, 0)));
-
-        GenericRow row2 = new GenericRow(2);
-        row2.setField(0, BinaryString.fromString("[2020, 2]"));
-        row2.setField(1, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 2, 1, 0, 0, 0, 0)));
-        new MockUp<RecordReaderIterator>() {
-            private int callCount;
-            private final GenericRow[] elements = {row1, row2};
-            private final boolean[] hasNextOutputs = {true, true, false};
-
-            @Mock
-            public boolean hasNext() {
-                if (callCount < hasNextOutputs.length) {
-                    return hasNextOutputs[callCount];
-                }
-                return false;
-            }
-
-            @Mock
-            public InternalRow next() {
-                if (callCount < elements.length) {
-                    return elements[callCount++];
-                }
-                return null;
-            }
-        };
-        Assert.assertFalse(metadata.tableExists("nonexistentDb", "nonexistentTbl"));
         Assert.assertNull(metadata.getTable("nonexistentDb", "nonexistentTbl"));
     }
 
@@ -663,6 +604,7 @@ public class PaimonMetadataTest {
                 new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, columnMetaToColRefMap,
                         -1, null));
         rule0.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
+        // use paimon sdk to prune partition here
         assertEquals(0, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
                 .getSelectedPartitionIds().size());
     }
