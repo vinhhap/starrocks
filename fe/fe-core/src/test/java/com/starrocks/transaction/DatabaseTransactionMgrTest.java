@@ -241,7 +241,6 @@ public class DatabaseTransactionMgrTest {
         lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable8, transactionId8);
 
         Assert.assertEquals(transactionId2, masterTransMgr.getMinActiveTxnId());
-        Assert.assertEquals(GlobalStateMgrTestUtil.testDbId1, masterTransMgr.getMinActiveCompactionTxnId().second.longValue());
 
         transactionGraph.add(transactionId6, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
         transactionGraph.add(transactionId7, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));

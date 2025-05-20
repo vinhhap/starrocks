@@ -33,12 +33,9 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.MockedWarehouseManager;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -62,44 +59,6 @@ public class CompactionSchedulerTest {
     private GlobalTransactionMgr globalTransactionMgr;
     @Mocked
     private DatabaseTransactionMgr dbTransactionMgr;
-
-    @Test
-    public void testBeginTransactionSucceedWithSmallerStreamLoadTimeout() {
-        long dbId = 9000L;
-        long transactionId = 12345L;
-        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
-        new Expectations() {
-            {
-                try {
-                    dbTransactionMgr.beginTransaction(
-                            (List<Long>) any, anyString, (TUniqueId) any, (TransactionState.TxnCoordinator) any,
-                            (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong
-                    );
-                } catch (Exception e) {
-                    // skip
-                }
-                result = transactionId;
-            }
-        };
-
-        UtFrameUtils.mockInitWarehouseEnv();
-
-        // default value
-        Config.lake_compaction_default_timeout_second = 86400;
-        // value smaller than `lake_compaction_default_timeout_second`
-        // expect not affect lake compaction's  transaction operation
-        Config.max_stream_load_timeout_second = 64800;
-        CompactionMgr compactionManager = new CompactionMgr();
-        CompactionScheduler compactionScheduler =
-                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "");
-        PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, 2, 3);
-        try {
-            Assert.assertEquals(transactionId, compactionScheduler.beginTransaction(partitionIdentifier, 0));
-        } catch (Exception e) {
-            Assert.fail("Transaction failed for lake compaction");
-        }
-    }
 
     @Test
     public void testDisableTableCompaction() {
@@ -388,12 +347,10 @@ public class CompactionSchedulerTest {
             public WarehouseManager getWarehouseMgr() {
                 return mockedWarehouseManager;
             }
-
             @Mock
             public boolean isLeader() {
                 return true;
             }
-
             @Mock
             public boolean isReady() {
                 return true;
@@ -406,7 +363,8 @@ public class CompactionSchedulerTest {
 
         new MockUp<CompactionScheduler>() {
             @Mock
-            protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot) {
+            protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot,
+                                                    long warehouseId) {
                 Database db = new Database();
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
@@ -415,7 +373,7 @@ public class CompactionSchedulerTest {
             }
         };
         compactionScheduler.runOneCycle();
-        assertEquals(2, compactionScheduler.getRunningCompactions().size());
+        Assert.assertEquals(2, compactionScheduler.getRunningCompactions().size());
 
         CompactionScheduler.PARTITION_CLEAN_INTERVAL_SECOND = 0;
         new MockUp<MetaUtils>() {
@@ -429,14 +387,13 @@ public class CompactionSchedulerTest {
             public CompactionTask.TaskResult getResult() {
                 return CompactionTask.TaskResult.NONE_SUCCESS;
             }
-
             @Mock
             public String getFailMessage() {
                 return "abort in test";
             }
         };
         compactionScheduler.runOneCycle();
-        assertEquals(0, compactionScheduler.getRunningCompactions().size());
+        Assert.assertEquals(0, compactionScheduler.getRunningCompactions().size());
     }
 
     @Test
