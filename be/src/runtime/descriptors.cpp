@@ -157,6 +157,11 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const TIcebergTable& thrift_tab
                                                  const THdfsPartition& thrift_partition)
         : _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
 
+HdfsPartitionDescriptor::HdfsPartitionDescriptor(const TPaimonTable& thrift_table,
+                                                 const THdfsPartition& thrift_partition)
+        : _location(thrift_partition.location.suffix),
+          _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
+
 Status HdfsPartitionDescriptor::create_part_key_exprs(RuntimeState* state, ObjectPool* pool) {
     RETURN_IF_ERROR(Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_key_value_evals, state));
@@ -350,6 +355,11 @@ PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, Obje
     _partition_keys = tdesc.paimonTable.partition_keys;
     _bucket_num = tdesc.paimonTable.bucket_num;
     _bucket_keys = tdesc.paimonTable.bucket_keys;
+    _partition_columns = tdesc.paimonTable.partition_columns;
+    for (const auto& entry : tdesc.paimonTable.partitions) {
+        auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.paimonTable, entry.second));
+        _partition_id_to_desc_map[entry.first] = partition;
+    }
 }
 
 const std::string& PaimonTableDescriptor::get_paimon_native_table() const {
@@ -761,7 +771,9 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             break;
         }
         case TTableType::PAIMON_TABLE: {
-            desc = pool->add(new PaimonTableDescriptor(tdesc, pool));
+            auto* paimon_desc = pool->add(new PaimonTableDescriptor(tdesc, pool));
+            RETURN_IF_ERROR(paimon_desc->create_key_exprs(state, pool));
+            desc = paimon_desc;
             break;
         }
         case TTableType::FLUSS_TABLE: {

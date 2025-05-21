@@ -27,6 +27,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -384,6 +385,13 @@ public class OptExternalPartitionPruner {
                 ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
                 columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
             }
+        } else if (table instanceof PaimonTable) {
+            List<Column> partitionColumns = table.getPartitionColumns();
+            for (Column column : partitionColumns) {
+                ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
+                columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
+                columnToNullPartitions.put(partitionColumnRefOperator, Sets.newConcurrentHashSet());
+            }
         }
         LOG.debug("Table: {}, partition values map: {}, null partition map: {}", table.getName(),
                 columnToPartitionValuesMap, columnToNullPartitions);
@@ -449,6 +457,17 @@ public class OptExternalPartitionPruner {
 
             scanOperatorPredicates.getIdToPartitionKey().putAll(partitionKeyMap);
             scanOperatorPredicates.setSelectedPartitionIds(partitionKeyMap.keySet());
+        } else if (table instanceof PaimonTable) {
+            ListPartitionPruner partitionPruner =
+                    new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
+                            scanOperatorPredicates.getPartitionConjuncts(), null);
+            Collection<Long> selectedPartitionIds = partitionPruner.prune();
+            if (selectedPartitionIds == null) {
+                selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
+            }
+
+            scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
+            scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
         }
     }
 
