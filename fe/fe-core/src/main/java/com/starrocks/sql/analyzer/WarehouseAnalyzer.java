@@ -15,10 +15,10 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AstVisitor;
@@ -43,9 +43,7 @@ public class WarehouseAnalyzer {
 
         private void restrictOperationCheck(ConnectContext context) {
             // emr product restrictions
-            if (Config.enable_emr_product_restrictions
-                    && context.getCurrentUserIdentity() != null
-                    && !context.getCurrentUserIdentity().getUser().equals(AuthenticationMgr.ROOT_USER)) {
+            if (Config.enable_emr_product_restrictions && !Util.isRootUser(context.getCurrentUserIdentity())) {
                 throw new SemanticException(
                         "EMR Serverless StarRocks policies: Only root user can operate warehouses.");
             }
