@@ -2869,6 +2869,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_enable_bind_compaction_with_load_warehouse = false;
 
+    /**
+     * Lake compaction manager might punish compaction for a long time period, which will introduce confuse for diagnose,
+     * We want to print warning log if delay time is too long. The default threshold is 10 minutes.
+     */
+    @ConfField(mutable = true)
+    public static long lake_compaction_delay_time_warn_threshold_ms = 10 * 60 * 1000;
+
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
