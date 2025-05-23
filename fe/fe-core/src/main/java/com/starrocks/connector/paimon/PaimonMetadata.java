@@ -30,10 +30,8 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DlfUtil;
@@ -161,22 +159,22 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
+    public void createDb(String dbName, Map<String, String> properties) throws DdlException {
         try {
             paimonNativeCatalog.createDatabase(dbName, false, properties);
-        } catch (Catalog.DatabaseAlreadyExistException e) {
-            throw new AlreadyExistsException(e.getMessage());
+        } catch (Exception e) {
+            LOG.error("Failed to create Paimon database {}.{}.", catalogName, dbName, e);
+            throw new DdlException(e.getMessage());
         }
     }
 
     @Override
-    public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
+    public void dropDb(String dbName, boolean isForceDrop) throws DdlException {
         try {
             paimonNativeCatalog.dropDatabase(dbName, false, isForceDrop);
-        } catch (Catalog.DatabaseNotEmptyException e) {
-            throw new DdlException("Paimon error: " + e.getMessage());
-        } catch (Catalog.DatabaseNotExistException e) {
-            throw new MetaNotFoundException("Paimon error: " + e.getMessage());
+        } catch (Exception e) {
+            LOG.error("Failed to drop Paimon database {}.{}.", catalogName, dbName, e);
+            throw new DdlException(e.getMessage());
         }
     }
 
@@ -184,8 +182,9 @@ public class PaimonMetadata implements ConnectorMetadata {
     public List<String> listTableNames(String dbName) {
         try {
             return paimonNativeCatalog.listTables(dbName);
-        } catch (Catalog.DatabaseNotExistException e) {
-            throw new StarRocksConnectorException("Database %s not exists", dbName);
+        } catch (Exception e) {
+            LOG.error("Failed to list Paimon tables {}.{}.", catalogName, dbName, e);
+            throw new StarRocksConnectorException(e.getMessage());
         }
     }
 
@@ -220,8 +219,9 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         try {
             paimonNativeCatalog.createTable(new Identifier(dbName, tableName), schema, false);
-        } catch (Catalog.TableAlreadyExistException | Catalog.DatabaseNotExistException e) {
-            throw new DdlException("Paimon error: " + e.getMessage());
+        } catch (Exception e) {
+            LOG.error("Failed to create Paimon table {}.{}.{}.", catalogName, dbName, tableName, e);
+            throw new DdlException(e.getMessage());
         }
         return true;
     }
@@ -232,8 +232,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         String tableName = stmt.getTableName();
         try {
             paimonNativeCatalog.dropTable(new Identifier(dbName, tableName), false);
-        } catch (Catalog.TableNotExistException e) {
-            throw new DdlException("Paimon error: " + e.getMessage());
+        } catch (Exception e) {
+            LOG.error("Failed to drop Paimon table {}.{}.{}.", catalogName, dbName, tableName, e);
+            throw new DdlException(e.getMessage());
         }
     }
 
@@ -244,8 +245,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         partitionMap.put("dummy", partitionName);
         try {
             paimonNativeCatalog.dropPartitions(new Identifier(db.getOriginName(), table.getName()), List.of(partitionMap));
-        } catch (Catalog.TableNotExistException e) {
-            throw new DdlException("Paimon error: " + e.getMessage());
+        } catch (Exception e) {
+            LOG.error("Failed to drop Paimon table partition {}.{}.{}.", catalogName, db.getOriginName(), table.getName(), e);
+            throw new DdlException(e.getMessage());
         }
     }
 
@@ -259,8 +261,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         try {
             paimonTable = this.paimonNativeCatalog.getTable(identifier);
             dataTableRowType = paimonTable.rowType();
-        } catch (Catalog.TableNotExistException e) {
-            throw new StarRocksConnectorException(String.format("Paimon table %s.%s does not exist.", databaseName, tableName));
+        } catch (Exception e) {
+            LOG.error("Failed to get Paimon table {}.{}.{}.", catalogName, databaseName, tableName, e);
+            throw new StarRocksConnectorException(e.getMessage());
         }
         List<String> partitionColumnNames = paimonTable.partitionKeys();
         if (partitionColumnNames.isEmpty()) {
@@ -340,8 +343,8 @@ public class PaimonMetadata implements ConnectorMetadata {
             Database db = new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName);
             databases.put(dbName, db);
             return db;
-        } catch (Catalog.DatabaseNotExistException e) {
-            LOG.error("Paimon database {}.{} does not exist.", catalogName, dbName);
+        } catch (Exception e) {
+            LOG.error("Failed to get Paimon database {}.{}.", catalogName, dbName, e);
             return null;
         }
     }
@@ -356,8 +359,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         try {
             refreshDlfDataToken(dbName, tblName);
             paimonNativeTable = this.paimonNativeCatalog.getTable(identifier);
-        } catch (Catalog.TableNotExistException e) {
-            LOG.error("Paimon table {}.{} does not exist.", dbName, tblName, e);
+        } catch (Exception e) {
+            LOG.error("Failed to get Paimon table {}.{}.{}.", catalogName, dbName, tblName, e);
             return null;
         }
         List<DataField> fields = paimonNativeTable.rowType().getFields();
@@ -384,7 +387,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         try {
             paimonNativeCatalog.getTable(Identifier.create(dbName, tableName));
             return true;
-        } catch (Catalog.TableNotExistException e) {
+        } catch (Exception e) {
+            LOG.warn("Failed to get Paimon table {}.{}.{}.", catalogName, dbName, tableName, e);
             return false;
         }
     }
@@ -761,7 +765,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                 String dataTokenFilePath = dataTokenPath + dlfClient.getDataTokenIdentifier(dlfResource);
                 if (!dataTokenName.equalsIgnoreCase(dataTokenFilePath)) {
                     LOG.warn(dataTokenName + " != " + dataTokenFilePath);
-                    throw new RuntimeException("Accessing the wrong data token file " + dataTokenName);
+                    throw new StarRocksConnectorException("Accessing the wrong data token file " + dataTokenName);
                 }
                 DlfDataToken dlfDataToken = dlfClient.getDataToken(dlfResource);
                 String dataTokenJson = dlfDataToken.toJson();
@@ -773,7 +777,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                 this.dlfDataToken = dataToken;
             }
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw new StarRocksConnectorException(e.getMessage(), e);
         }
     }
 
@@ -840,8 +844,9 @@ public class PaimonMetadata implements ConnectorMetadata {
             try {
                 paimonNativeCatalog.invalidateTable(identifier);
                 ((CachingCatalog) paimonNativeCatalog).refreshPartitions(identifier);
-            } catch (Catalog.TableNotExistException e) {
-                throw new RuntimeException(e);
+            } catch (Exception e) {
+                LOG.error("Failed to refresh paimon partitions {}.{}.", catalogName, identifier.getFullName(), e);
+                throw new StarRocksConnectorException(e.getMessage(), e);
             }
         } else {
             LOG.warn("Current catalog {} does not support cache.", catalogName);
@@ -876,7 +881,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             commit.commit(messList);
             commit.close();
         } catch (Exception e) {
-            throw new StarRocksConnectorException(e.getMessage());
+            throw new StarRocksConnectorException(e.getMessage(), e);
         }
     }
 
