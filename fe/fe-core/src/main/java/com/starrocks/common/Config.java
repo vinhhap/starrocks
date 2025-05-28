@@ -2834,9 +2834,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 20;
 
-    @ConfField
-    public static long lake_compaction_schedule_interval_ms = 1000L;
-
     /**
      * While some compaction related txn's stat is not visible (prepared, committed, etc),
      * it will block Lake compaction scheduler from starting while FE is restarted.
@@ -2850,6 +2847,12 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static String lake_compaction_txn_id_filter_list = "";
+
+    @ConfField(mutable = true)
+    public static long lake_min_compaction_interval_ms_on_success = 10000;
+
+    @ConfField(mutable = true)
+    public static long lake_min_compaction_interval_ms_on_failure = 60000;
 
     @ConfField(mutable = true)
     public static String lake_compaction_warehouse = "default_warehouse";
