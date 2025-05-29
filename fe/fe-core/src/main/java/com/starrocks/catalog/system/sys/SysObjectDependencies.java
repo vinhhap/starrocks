@@ -25,6 +25,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
@@ -74,6 +75,10 @@ public class SysObjectDependencies {
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
         }
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setQualifiedUser(currentUser.getUser());
+        ctx.setCurrentUserIdentity(currentUser);
+        ctx.setThreadLocalInfo();
 
         // list dependencies of mv
         Locker locker = new Locker();
