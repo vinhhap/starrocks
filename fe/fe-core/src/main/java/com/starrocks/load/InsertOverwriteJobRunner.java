@@ -470,9 +470,9 @@ public class InsertOverwriteJobRunner {
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
-                targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
+                targetTable.replaceTempPartitions(dbId, sourcePartitionNames, tmpPartitionNames, true, false);
             } else if (partitionInfo instanceof SinglePartitionInfo) {
-                targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+                targetTable.replacePartition(dbId, sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             } else {
                 throw new DdlException("partition type " + partitionInfo.getType() + " is not supported");
             }

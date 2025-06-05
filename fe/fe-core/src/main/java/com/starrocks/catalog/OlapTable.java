@@ -1440,6 +1440,7 @@ public class OlapTable extends Table {
     }
 
     public void dropPartitionAndReserveTablet(String partitionName) {
+        // reserveTablets is true and partition is not recycled, so dbId -1 is ok.
         dropPartition(-1, partitionName, true, true);
     }
 
@@ -2187,14 +2188,14 @@ public class OlapTable extends Table {
      *
      * return the old partition.
      */
-    public Partition replacePartition(Partition newPartition) {
+    public Partition replacePartition(long dbId, Partition newPartition) {
         Partition oldPartition = nameToPartition.remove(newPartition.getName());
 
         // For cloud native table, add partition into recycle Bin after truncate table.
         // It is no necessary for share nothing mode because file will be deleted throught
         // tablet report in this case.
         if (this.isCloudNativeTableOrMaterializedView()) {
-            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(-1, oldPartition);
+            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, oldPartition);
             recyclePartitionInfo.setRecoverable(false);
             GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
         }
@@ -2824,7 +2825,7 @@ public class OlapTable extends Table {
      * names are still p1 and p2.
      *
      */
-    public void replaceTempPartitions(List<String> partitionNames, List<String> tempPartitionNames,
+    public void replaceTempPartitions(long dbId, List<String> partitionNames, List<String> tempPartitionNames,
                                       boolean strictRange, boolean useTempPartitionName) throws DdlException {
         if (partitionInfo instanceof RangePartitionInfo) {
             RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
@@ -2887,7 +2888,7 @@ public class OlapTable extends Table {
         // 1. drop old partitions
         for (String partitionName : partitionNames) {
             // This will also drop all tablets of the partition from TabletInvertedIndex
-            dropPartitionWithRetention(-1, partitionName, Config.partition_recycle_retention_period_secs);
+            dropPartitionWithRetention(dbId, partitionName, Config.partition_recycle_retention_period_secs);
         }
 
         // 2. add temp partitions' range info to rangeInfo, and remove them from
@@ -2916,14 +2917,14 @@ public class OlapTable extends Table {
 
     // used for unpartitioned table in insert overwrite
     // replace partition with temp partition
-    public void replacePartition(String sourcePartitionName, String tempPartitionName) {
+    public void replacePartition(long dbId, String sourcePartitionName, String tempPartitionName) {
         if (partitionInfo.getType() != PartitionType.UNPARTITIONED) {
             return;
         }
         // drop source partition
         Partition srcPartition = nameToPartition.get(sourcePartitionName);
         if (srcPartition != null) {
-            dropPartitionWithRetention(-1, sourcePartitionName, Config.partition_recycle_retention_period_secs);
+            dropPartitionWithRetention(dbId, sourcePartitionName, Config.partition_recycle_retention_period_secs);
         }
 
         Partition partition = tempPartitions.getPartition(tempPartitionName);
