@@ -1953,17 +1953,13 @@ public class AstToStringBuilder {
         if (table.isPaimonTable()) {
             createTableSql.append(",\n");
             Map<String, String> options = ((PaimonTable) table).getNativeTable().options();
-            boolean trunc = false;
             for (Map.Entry<String, String> entry : options.entrySet()) {
                 if (!entry.getKey().equals("path")) {
                     createTableSql.append(" \"").append(entry.getKey()).append("\" = ");
                     createTableSql.append("\"").append(entry.getValue()).append("\",\n");
-                    trunc = true;
-                }
-                if (trunc) {
-                    createTableSql.setLength(createTableSql.length() - 2);
                 }
             }
+            createTableSql.setLength(createTableSql.length() - 2);
         }
         return createTableSql.append(");").toString();
     }
