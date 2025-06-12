@@ -38,9 +38,10 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergRemoteFileDesc;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
-import com.starrocks.credential.CloudType;
+import com.starrocks.credential.aliyun.AliyunCloudCredential;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -65,6 +66,8 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.io.StorageCredential;
+import org.apache.iceberg.rest.DlfFileIO;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -72,6 +75,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -104,21 +108,12 @@ public class IcebergScanNode extends ScanNode {
             return;
         }
 
-        // Hard coding here
-        // Try to get tabular signed temporary credential
-        CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForTabular(icebergTable.getNativeTable().io().properties());
-        if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            // If we get CloudConfiguration succeed from iceberg FileIO's properties, we just using it.
-            cloudConfiguration = tabularTempCloudConfiguration;
-        } else {
-            CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
-            Preconditions.checkState(connector != null,
-                    String.format("connector of catalog %s should not be null", catalogName));
-            cloudConfiguration = connector.getMetadata().getCloudConfiguration();
-            Preconditions.checkState(cloudConfiguration != null,
-                    String.format("cloudConfiguration of catalog %s should not be null", catalogName));
-        }
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalogName));
+        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalogName));
     }
 
     public void preProcessIcebergPredicate(ScalarOperator predicate) {
@@ -417,6 +412,33 @@ public class IcebergScanNode extends ScanNode {
         if (!deleteColumnSlotIds.isEmpty()) {
             msg.hdfs_scan_node.setMor_tuple_id(equalityDeleteTupleDesc.getId().asInt());
         }
+
+        if (icebergTable.getNativeTable().io() instanceof DlfFileIO) {
+            DlfFileIO fileIO = (DlfFileIO) icebergTable.getNativeTable().io();
+            List<StorageCredential> token = fileIO.validToken();
+            Map<String, String> credentialsMap =
+                    token.stream()
+                            .map(StorageCredential::config)
+                            .flatMap(map -> map.entrySet().stream())
+                            .collect(
+                                    Collectors.toMap(
+                                            Map.Entry::getKey,
+                                            Map.Entry::getValue,
+                                            (existing, replacement) -> replacement));
+
+            Map<String, String> properties = new HashMap<>();
+            properties.put(CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY,
+                    credentialsMap.get(AliyunCloudCredential.FS_OSS_ACCESS_KEY));
+            properties.put(CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY,
+                    credentialsMap.get(AliyunCloudCredential.FS_OSS_SECRET_KEY));
+            properties.put(CloudConfigurationConstants.ALIYUN_OSS_STS_TOKEN,
+                    credentialsMap.get(AliyunCloudCredential.FS_OSS_SECURITY_TOKEN));
+            properties.put(CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT,
+                    credentialsMap.get(AliyunCloudCredential.FS_OSS_ENDPOINT));
+
+            cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        }
+
 
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);

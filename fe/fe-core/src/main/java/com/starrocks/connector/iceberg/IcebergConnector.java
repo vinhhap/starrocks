@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DlfUtil;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -24,9 +25,11 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import com.starrocks.connector.iceberg.hadoop.IcebergHadoopCatalog;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.connector.iceberg.rest.IcebergDLFRESTCatalog;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.util.ThreadPools;
@@ -36,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
@@ -48,6 +52,8 @@ public class IcebergConnector implements Connector {
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
+    // for DLF REST catalog only
+    private final Map<String, IcebergCatalog> nativeIcebergCatalogs = new ConcurrentHashMap<>();
     private ExecutorService icebergJobPlanningExecutor;
     private ExecutorService refreshOtherFeExecutor;
     private final IcebergCatalogProperties icebergCatalogProperties;
@@ -60,7 +66,7 @@ public class IcebergConnector implements Connector {
         this.icebergCatalogProperties = new IcebergCatalogProperties(properties);
     }
 
-    private IcebergCatalog buildIcebergNativeCatalog() {
+    private IcebergCatalog buildIcebergNativeCatalog(String ramUser) {
         IcebergCatalogType nativeCatalogType = icebergCatalogProperties.getCatalogType();
         Configuration conf = hdfsEnvironment.getConfiguration();
 
@@ -80,6 +86,9 @@ public class IcebergConnector implements Connector {
                 return new IcebergRESTCatalog(catalogName, conf, properties);
             case HADOOP_CATALOG:
                 return new IcebergHadoopCatalog(catalogName, conf, properties);
+            case DLF_REST_CATALOG:
+                return new IcebergDLFRESTCatalog(catalogName, ramUser, conf, properties);
+
             default:
                 throw new StarRocksConnectorException("Property %s is missing or not supported now.", ICEBERG_CATALOG_TYPE);
         }
@@ -94,18 +103,36 @@ public class IcebergConnector implements Connector {
     // In order to be compatible with the catalog created with the wrong configuration,
     // icebergNativeCatalog is lazy, mainly to prevent fe restart failure.
     public IcebergCatalog getNativeCatalog() {
-        if (icebergNativeCatalog == null) {
-            IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
-
-            if (icebergCatalogProperties.enableIcebergMetadataCache() && !isResourceMappingCatalog(catalogName)) {
-                nativeCatalog = new CachingIcebergCatalog(catalogName, nativeCatalog,
-                        icebergCatalogProperties, buildBackgroundJobPlanningExecutor());
-                GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
-                        .registerCachingIcebergCatalog(catalogName, nativeCatalog);
+        IcebergCatalogType nativeCatalogType = icebergCatalogProperties.getCatalogType();
+        if (nativeCatalogType == IcebergCatalogType.DLF_REST_CATALOG) {
+            String ramUser = DlfUtil.getRamUser();
+            if (ramUser.isEmpty()) {
+                String qualifiedUser = ConnectContext.get().getQualifiedUser();
+                String user = ConnectContext.get().getCurrentUserIdentity().getUser();
+                throw new StarRocksConnectorException("Failed to find a valid RAM user from %s(%s). " +
+                        "Please check your user properties.", qualifiedUser, user);
             }
-            this.icebergNativeCatalog = nativeCatalog;
+            String catalogKey = this.catalogName + "-" + ramUser;
+            if (this.nativeIcebergCatalogs.get(catalogKey) != null) {
+                return this.nativeIcebergCatalogs.get(catalogKey);
+            } else {
+                IcebergCatalog catalog = buildIcebergNativeCatalog(ramUser);
+                this.nativeIcebergCatalogs.put(catalogKey, catalog);
+                return catalog;
+            }
+        } else {
+            if (icebergNativeCatalog == null) {
+                IcebergCatalog nativeCatalog = buildIcebergNativeCatalog("");
+                if (icebergCatalogProperties.enableIcebergMetadataCache() && !isResourceMappingCatalog(catalogName)) {
+                    nativeCatalog = new CachingIcebergCatalog(catalogName, nativeCatalog,
+                            icebergCatalogProperties, buildBackgroundJobPlanningExecutor());
+                    GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                            .registerCachingIcebergCatalog(catalogName, nativeCatalog);
+                }
+                this.icebergNativeCatalog = nativeCatalog;
+            }
+            return icebergNativeCatalog;
         }
-        return icebergNativeCatalog;
     }
 
     private ExecutorService buildIcebergJobPlanningExecutor() {
