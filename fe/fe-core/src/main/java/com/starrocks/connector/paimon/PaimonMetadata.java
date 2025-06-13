@@ -134,7 +134,6 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PredicateSearchKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
     private final Map<Identifier, Map<String, Partition>> partitionInfos = new ConcurrentHashMap<>();
-    private DlfDataToken dlfDataToken;
 
     public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog) {
         this.paimonNativeCatalog = paimonNativeCatalog;
@@ -393,6 +392,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                                                    List<String> fieldNames, long limit) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         PaimonTable paimonTable = (PaimonTable) table;
+        refreshDlfDataToken(paimonTable.getDbName(), paimonTable.getTableName());
         long latestSnapshotId = -1L;
         try {
             if (paimonTable.getNativeTable().latestSnapshot().isPresent()) {
@@ -498,6 +498,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
                                          long limit) {
+        refreshDlfDataToken(((PaimonTable) table).getDbName(), ((PaimonTable) table).getTableName());
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "GetPaimonTableStatistics")) {
             Statistics.Builder builder = Statistics.builder();
             if (!session.getSessionVariable().enablePaimonColumnStatistics()) {
@@ -667,11 +668,11 @@ public class PaimonMetadata implements ConnectorMetadata {
         return result;
     }
 
-    private void refreshDlfDataToken(String dbName, String tblName) {
+    public void refreshDlfDataToken(String dbName, String tblName) {
         String ramUser = DlfUtil.getRamUser();
         if (null == ramUser || ramUser.isEmpty() || paimonNativeCatalog.options().isEmpty()
                 || !paimonNativeCatalog.options().get("metastore").equalsIgnoreCase("dlf-paimon")) {
-            LOG.debug("Don't need to refresh.");
+            LOG.debug("Don't need to refresh for table {}.{} for user {}", dbName, tblName, ramUser);
             return;
         }
         DlfConfig config = new DlfConfig();
@@ -707,7 +708,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
             Path dataTokenDir = Paths.get(dataTokenPath);
             if (!Files.exists(dataTokenDir)) {
-                LOG.info("Creating data token parent dir " + dataTokenPath);
+                LOG.debug("Creating data token parent dir {} for {}.{}", dataTokenPath, dbName, tblName);
                 Files.createDirectories(dataTokenDir);
             }
             dataTokenName = dataTokenPath + dataTokenName;
@@ -716,12 +717,8 @@ public class PaimonMetadata implements ConnectorMetadata {
             boolean hasDataTokenFile = dataTokenFile.exists();
             DlfDataToken dataToken = new DlfDataToken();
             if (hasDataTokenFile) {
-                if (null != this.dlfDataToken) {
-                    dataToken = this.dlfDataToken;
-                } else {
-                    ObjectMapper mapper = new ObjectMapper();
-                    dataToken = mapper.readValue(dataTokenFile, DlfDataToken.class);
-                }
+                ObjectMapper mapper = new ObjectMapper();
+                dataToken = mapper.readValue(dataTokenFile, DlfDataToken.class);
             }
             // Check if the token has expired
             // todo: async refresh
@@ -729,8 +726,6 @@ public class PaimonMetadata implements ConnectorMetadata {
                     < Config.dlf_data_token_refresh_check_interval_second * 1000) {
                 DlfContext dlfContext = new DlfContext(config, "");
                 DlfTokenClient dlfClient = dlfContext.getDlfTokenClient(ramUser);
-
-                LOG.info("Updating data token for " + dataTokenName);
                 String dataTokenFilePath = dataTokenPath + dlfClient.getDataTokenIdentifier(dlfResource);
                 if (!dataTokenName.equalsIgnoreCase(dataTokenFilePath)) {
                     LOG.warn(dataTokenName + " != " + dataTokenFilePath);
@@ -741,9 +736,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                 BufferedWriter writer = new BufferedWriter(new FileWriter(dataTokenName));
                 writer.write(dataTokenJson);
                 writer.close();
-                this.dlfDataToken = dlfDataToken;
-            } else {
-                this.dlfDataToken = dataToken;
+                LOG.debug("Updated data token {} of {}.{} on {}", dataTokenJson, dbName, tblName, dataTokenName);
             }
         } catch (Exception e) {
             throw new StarRocksConnectorException(e.getMessage(), e);
