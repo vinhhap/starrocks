@@ -131,7 +131,7 @@ private:
 
         std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint) {
             if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
-                auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint);
+                auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint, "");
                 if (!stub->reset_channel().ok()) {
                     return nullptr;
                 }
@@ -194,8 +194,8 @@ public:
             return *stub_ptr;
         }
         // create
-        auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint);
-        if (!stub->reset_channel("http").ok()) {
+        auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint, "http");
+        if (!stub->reset_channel().ok()) {
             return Status::RuntimeError("init brpc http channel error on " + taddr.hostname + ":" +
                                         std::to_string(taddr.port));
         }
