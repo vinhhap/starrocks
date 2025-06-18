@@ -69,7 +69,6 @@ under the License.
         <dnsjava.version>3.6.3</dnsjava.version>
         <nimbusds.version>9.37.2</nimbusds.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
-        <paimon.version>1-ali-11.1</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.7.1</iceberg.version>
         <staros.version>3.3.3-SNAPSHOT</staros.version>
@@ -1077,25 +1076,6 @@ under the License.
                 <artifactId>nimbus-jose-jwt</artifactId>
                 <version>${nimbusds.version}</version>
             </dependency>
-
-            <dependency>
-                <groupId>org.apache.paimon</groupId>
-                <artifactId>paimon-bundle</artifactId>
-                <version>${paimon.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.paimon</groupId>
-                <artifactId>paimon-s3</artifactId>
-                <version>${paimon.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.paimon</groupId>
-                <artifactId>paimon-oss</artifactId>
-                <version>${paimon.version}</version>
-            </dependency>
-
 
             <dependency>
                 <groupId>io.delta</groupId>

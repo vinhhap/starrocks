@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PaimonPartitionKey;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -298,13 +299,16 @@ public class PaimonMetadata implements ConnectorMetadata {
                     "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
             throw new IllegalArgumentException(errorMsg);
         }
+        PaimonPartitionKey partitionKey = new PaimonPartitionKey();
 
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < partitionValues.length; i++) {
             String column = partitionColumnNames.get(i);
             String value = partitionValues[i].trim();
             if (partitionColumnTypes.get(i) instanceof DateType) {
-                value = DateTimeUtils.formatDate(Integer.parseInt(value));
+                if (!partitionKey.nullPartitionValueList().contains(value)) {
+                    value = DateTimeUtils.formatDate(Integer.parseInt(value));
+                }
             }
             sb.append(column).append("=").append(value);
             sb.append("/");
@@ -416,7 +420,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
             InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
-            List<Split> splits = scan.withMetricsRegistry(paimonMetricRegistry).plan().splits();
+            List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();
             traceScanMetrics(paimonMetricRegistry, splits, ((PaimonTable) table).getTableName(), predicates,
                     String.valueOf(Objects.hash(predicate)));
 
@@ -501,45 +505,48 @@ public class PaimonMetadata implements ConnectorMetadata {
         refreshDlfDataToken(((PaimonTable) table).getDbName(), ((PaimonTable) table).getTableName());
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "GetPaimonTableStatistics")) {
             Statistics.Builder builder = Statistics.builder();
-            if (!session.getSessionVariable().enablePaimonColumnStatistics()) {
-                return defaultStatistics(columns, table, predicate, limit);
+            if (session.getSessionVariable().enablePaimonColumnStatistics()) {
+                org.apache.paimon.table.Table nativeTable = ((PaimonTable) table).getNativeTable();
+                Optional<org.apache.paimon.stats.Statistics> statistics = nativeTable.statistics();
+                if (!statistics.isPresent() || statistics.get().colStats() == null
+                        || !statistics.get().mergedRecordCount().isPresent()) {
+                    return defaultStatistics(session, columns, table, predicate, limit);
+                }
+                long rowCount = statistics.get().mergedRecordCount().getAsLong();
+                builder.setOutputRowCount(rowCount);
+                Map<String, ColStats<?>> colStatsMap = statistics.get().colStats();
+                for (ColumnRefOperator column : columns.keySet()) {
+                    builder.addColumnStatistic(column, buildColumnStatistic(columns.get(column), colStatsMap, rowCount));
+                }
+                return builder.build();
+            } else {
+                return defaultStatistics(session, columns, table, predicate, limit);
             }
-
-            org.apache.paimon.table.Table nativeTable = ((PaimonTable) table).getNativeTable();
-            Optional<org.apache.paimon.stats.Statistics> statistics = nativeTable.statistics();
-            if (!statistics.isPresent() || statistics.get().colStats() == null
-                    || !statistics.get().mergedRecordCount().isPresent()) {
-                return defaultStatistics(columns, table, predicate, limit);
-            }
-            long rowCount = statistics.get().mergedRecordCount().getAsLong();
-            builder.setOutputRowCount(rowCount);
-            Map<String, ColStats<?>> colStatsMap = statistics.get().colStats();
-            for (ColumnRefOperator column : columns.keySet()) {
-                builder.addColumnStatistic(column, buildColumnStatistic(columns.get(column), colStatsMap, rowCount));
-            }
-            return builder.build();
         }
     }
 
-    private Statistics defaultStatistics(Map<ColumnRefOperator, Column> columns, Table table, ScalarOperator predicate,
-                                         long limit) {
+    private Statistics defaultStatistics(OptimizerContext session, Map<ColumnRefOperator, Column> columns, Table table,
+                                         ScalarOperator predicate, long limit) {
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
-        List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
-        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, table, null, -1, predicate, fieldNames, limit);
-        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
-        List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
-        long rowCount = getRowCount(splits);
-        if (rowCount == 0) {
-            builder.setOutputRowCount(1);
+        if (session.getSessionVariable().enablePaimonEstimatedStatistics()) {
+            List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
+            List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
+                    catalogName, table, null, -1, predicate, fieldNames, limit);
+            PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
+            List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
+            long rowCount = getRowCount(splits);
+            if (rowCount == 0) {
+                builder.setOutputRowCount(1);
+            } else {
+                builder.setOutputRowCount(rowCount);
+            }
         } else {
-            builder.setOutputRowCount(rowCount);
+            builder.setOutputRowCount(1);
         }
         return builder.build();
-
     }
 
 
