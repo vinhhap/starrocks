@@ -392,6 +392,13 @@ struct THdfsScanRange {
 
     // Paimon Deletion Vector File
     27: optional TPaimonDeletionFile paimon_deletion_file
+
+    // how many records are in this file?
+    // could be used for optimization like count(1)
+    28: optional i64 record_count
+
+    // is this scan range the first split of this file?
+    29: optional bool is_first_split
 }
 
 struct TBinlogScanRange {
@@ -1110,6 +1117,7 @@ struct THdfsScanNode {
 
     13: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
 
+    // deprecated. not used any more.
     14: optional bool can_use_any_column;
 
     15: optional bool can_use_min_max_count_opt;
