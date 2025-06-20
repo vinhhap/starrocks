@@ -816,6 +816,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BACK_PRESSURE_MAX_ROUNDS = "back_pressure_back_rounds";
     public static final String BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND = "back_pressure_throttle_time_upper_bound";
 
+    // GIN variables
+    public static final String ENABLE_PHRASE_QUERY_SEQUENTIAL_OPT = "enable_phrase_query_sequential_opt";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1614,6 +1617,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int backPressureMaxRounds = 3;
     @VarAttr(name = BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND)
     private long backPressureThrottleTimeUpperBound = 300;
+
+    @VarAttr(name = ENABLE_PHRASE_QUERY_SEQUENTIAL_OPT)
+    private boolean enablePhraseQuerySequentialOpt = false;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -4460,6 +4466,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_early_return_selectivity(runtimeFilterEarlyReturnSelectivity);
 
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
+        tResult.setEnable_phrase_query_sequential_opt(enablePhraseQuerySequentialOpt);
 
         tResult.setEnable_scan_datacache(enableScanDataCache);
         tResult.setEnable_populate_datacache(enablePopulateDataCache);

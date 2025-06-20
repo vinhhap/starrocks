@@ -940,7 +940,7 @@ public class Explain {
 
         @Override
         public String visitMatchExprOperator(MatchExprOperator predicate, Void context) {
-            return print(predicate.getChild(0)) + " MATCH " + print(predicate.getChild(1));
+            return print(predicate.getChild(0)) + " " + predicate.getMatchType() + " " + print(predicate.getChild(1));
         }
 
         @Override
