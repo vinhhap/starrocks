@@ -79,8 +79,10 @@ void HorizontalGeneralTabletWriter::close() {
 
 Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     DCHECK(_schema != nullptr);
-    auto name = gen_segment_filename(_txn_id);
+    auto segment_location = _tablet_mgr->segment_location(_tablet_id, gen_segment_filename(_txn_id));
+    VLOG(10) << "Create segment writer for " << segment_location;
     SegmentWriterOptions opts;
+    opts.segment_file_mark = segment_location;
     opts.is_compaction = _is_compaction;
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
@@ -94,7 +96,7 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     }
     wopts.tablet_id = _tablet_id;
 
-    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(wopts, segment_location));
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
@@ -274,9 +276,11 @@ void VerticalGeneralTabletWriter::close() {
 StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     DCHECK(_schema != nullptr);
-    auto name = gen_segment_filename(_txn_id);
+    auto segment_location = _tablet_mgr->segment_location(_tablet_id, gen_segment_filename(_txn_id));
+    VLOG(10) << "Create segment writer for " << segment_location;
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
+    opts.segment_file_mark = segment_location;
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
@@ -289,7 +293,7 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     }
     wopts.tablet_id = _tablet_id;
 
-    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(wopts, segment_location));
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));
     return w;
