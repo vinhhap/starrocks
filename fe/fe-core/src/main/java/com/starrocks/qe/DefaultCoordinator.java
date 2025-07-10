@@ -282,7 +282,7 @@ public class DefaultCoordinator extends Coordinator {
         queryProfile.attachInstances(Collections.singletonList(queryId));
         queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
 
-        this.coordinatorPreprocessor = null;
+        this.coordinatorPreprocessor = new CoordinatorPreprocessor(connectContext, jobSpec, false);
     }
 
     DefaultCoordinator(ConnectContext context, JobSpec jobSpec) {
