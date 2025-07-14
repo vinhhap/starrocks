@@ -18,6 +18,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
@@ -72,6 +73,7 @@ public class QueryQueueManager {
             MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(1L);
             MetricRepo.COUNTER_QUERY_QUEUE_TOTAL.increase(1L);
             ResourceGroupMetricMgr.increaseQueuedQuery(context, 1L);
+            WarehouseMetricMgr.increaseQueuedQuery(context, 1L);
 
             long deadlineEpochMs = slotRequirement.getExpiredPendingTimeMs();
             LogicalSlot allocatedSlot = null;
@@ -85,6 +87,7 @@ public class QueryQueueManager {
                             GlobalVariable.getQueryQueuePendingTimeoutSecond(),
                             GlobalVariable.QUERY_QUEUE_PENDING_TIMEOUT_SECOND);
                     ResourceGroupMetricMgr.increaseTimeoutQueuedQuery(context, 1L);
+                    WarehouseMetricMgr.increaseTimeoutQueuedQuery(context, 1L);
                     throw new UserException(errMsg);
                 }
 
@@ -115,6 +118,7 @@ public class QueryQueueManager {
                 context.auditEventBuilder.setPendingTimeMs(System.currentTimeMillis() - startMs);
                 MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(-1L);
                 ResourceGroupMetricMgr.increaseQueuedQuery(context, -1L);
+                WarehouseMetricMgr.increaseQueuedQuery(context, -1L);
                 context.setPending(false);
             }
         }
