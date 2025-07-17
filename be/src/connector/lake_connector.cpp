@@ -593,6 +593,9 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _prefetch_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "PrefetchHitCount", TUnit::UNIT, io_statistics_name);
     _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", io_statistics_name);
     _prefetch_pending_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchPendingTime", io_statistics_name);
+    // IO adaptor
+    _skip_cache_count = ADD_CHILD_COUNTER(_runtime_profile, "SkipCacheCount", TUnit::UNIT, io_statistics_name);
+    _skip_cache_bytes = ADD_CHILD_COUNTER(_runtime_profile, "SkipCacheBytes", TUnit::BYTES, io_statistics_name);
 
     // Index starcache statistics
     const std::string index_statistics_name = "IndexIOStatistics";
@@ -780,6 +783,9 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_prefetch_hit_counter, _reader->stats().prefetch_hit_count);
     COUNTER_UPDATE(_prefetch_wait_finish_timer, _reader->stats().prefetch_wait_finish_ns);
     COUNTER_UPDATE(_prefetch_pending_timer, _reader->stats().prefetch_pending_ns);
+
+    COUNTER_UPDATE(_skip_cache_count, _reader->stats().skip_cache_count);
+    COUNTER_UPDATE(_skip_cache_bytes, _reader->stats().skip_cache_bytes);
 
     auto stats = _reader->stats();
     COUNTER_UPDATE(_shared_buffered_shared_io_count, stats.shared_buffered_shared_io_count);

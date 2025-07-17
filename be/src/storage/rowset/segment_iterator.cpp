@@ -2236,6 +2236,10 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
             _opts.stats->shared_buffered_direct_io_bytes += value;
         } else if (name == kDirectIoTimer) {
             _opts.stats->shared_buffered_direct_io_time_ns += value;
+        } else if (name == kSkipCacheCount) {
+            _opts.stats->skip_cache_count += value;
+        } else if (name == kSkipCacheBytes) {
+            _opts.stats->skip_cache_bytes += value;
         }
     }
 }

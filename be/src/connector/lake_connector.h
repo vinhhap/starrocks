@@ -194,6 +194,9 @@ private:
     RuntimeProfile::Counter* _prefetch_hit_counter = nullptr;
     RuntimeProfile::Counter* _prefetch_wait_finish_timer = nullptr;
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
+    // IO adaptor
+    RuntimeProfile::Counter* _skip_cache_count = nullptr;
+    RuntimeProfile::Counter* _skip_cache_bytes = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
     RuntimeProfile::Counter* _access_path_hits_counter = nullptr;

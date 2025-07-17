@@ -237,6 +237,8 @@ public:
         stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
         stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
         stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
+        stats->append(kSkipCacheCount, read_stats.skip_cache_count);
+        stats->append(kSkipCacheBytes, read_stats.skip_cache_bytes);
 
         const auto& index_read_stats = (*stream_st)->get_index_io_stats();
 

@@ -507,6 +507,8 @@ void init_staros_worker() {
     fslib::FLAGS_index_cache_block_size_bytes = config::starlet_index_cache_block_size_bytes;
     fslib::FLAGS_star_cache_enable_stat = config::starlet_enable_cache_stat;
     fslib::FLAGS_star_cache_meta_size_bytes = config::starlet_star_cache_meta_size_bytes;
+    fslib::FLAGS_star_cache_enable_adaptor = config::starlet_enable_io_adaptor;
+    fslib::FLAGS_star_cache_skip_read_factor = config::starlet_skip_read_factor;
 
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;

@@ -1064,6 +1064,10 @@ CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 CONF_mInt32(starlet_starmgr_client_rpc_timeout_ms, "5000");
 CONF_mBool(starlet_enable_cache_stat, "false");
 CONF_mBool(starlet_enable_on_demand_shard_cache, "true");
+CONF_mBool(starlet_enable_io_adaptor, "false");
+// If enable_io_adaptor is set and average disk_read_latency * skip_read_factor > oss_read_latency,
+// data will be read from oss instead of local disk
+CONF_Double(starlet_skip_read_factor, "1.0");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");

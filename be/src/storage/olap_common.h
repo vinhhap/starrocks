@@ -322,6 +322,9 @@ struct OlapReaderStatistics {
     int64_t shared_buffered_direct_io_bytes = 0;
     int64_t shared_buffered_direct_io_time_ns = 0;
 
+    int64_t skip_cache_count = 0;
+    int64_t skip_cache_bytes = 0;
+
     // for index
     int64_t ordinal_index_page_io_count = 0;
 
@@ -383,6 +386,8 @@ const char* const kSharedIoTimer = "shared_io_timer";
 const char* const kDirectIoCount = "direct_io_count";
 const char* const kDirectIoBytes = "direct_io_bytes";
 const char* const kDirectIoTimer = "direct_io_timer";
+const char* const kSkipCacheCount = "skip_cache_count";
+const char* const kSkipCacheBytes = "skip_cache_bytes";
 
 // The position index of a column in a specific TabletSchema starts from 0.
 // The position of the same column in different TabletSchema may be different, which
