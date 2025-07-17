@@ -2918,6 +2918,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
 
+    @ConfField(mutable = true, comment = "Used for big tablet that may contain many rowsets," +
+            " support to split rowsets to mutiple ranges for compaction running on distributed mode")
+    public static boolean lake_force_enable_rowset_range_compaction = false;
+
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;
 

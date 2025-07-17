@@ -37,6 +37,7 @@
 #include "common/status.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "service/internal_service.h"
 
 namespace brpc {
@@ -97,6 +98,8 @@ public:
                                            const PTabletReaderScanGetNextRequest* request,
                                            PTabletReaderScanGetNextResult* response,
                                            google::protobuf::Closure* done) override;
+    void lake_compact_rowset_range(google::protobuf::RpcController* controller, const CompactRequest* request,
+                                   CompactResponse* response, google::protobuf::Closure* done) override;
 };
 
 } // namespace starrocks

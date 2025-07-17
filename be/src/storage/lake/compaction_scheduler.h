@@ -83,6 +83,8 @@ public:
     // check if txn in FE still valid while compaction task (specified by `context`) is running
     Status is_txn_still_valid();
 
+    CompactResponse* get_response() const { return _response; }
+
 private:
     const static int64_t kDefaultTimeoutMs = 24L * 60 * 60 * 1000; // 1 day
 
@@ -213,6 +215,8 @@ public:
 
     void compact(::google::protobuf::RpcController* controller, const CompactRequest* request,
                  CompactResponse* response, ::google::protobuf::Closure* done);
+
+    void prepare_rs_compact(const CompactRequest* request, CompactionTaskContext* context, const int64_t tablet_id);
 
     // Finds all compaction tasks for the given |txn_id| and aborts them.
     // Marks the tasks as aborted and returns immediately, without waiting

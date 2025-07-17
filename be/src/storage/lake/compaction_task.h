@@ -53,6 +53,10 @@ public:
 
     Status fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer);
 
+    Status finish_rs_range_compaction(TabletWriter* writer);
+    // fill segment info for rowset range compaction
+    Status fill_rs_range_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, CompactResponse* response);
+
 protected:
     int64_t _txn_id;
     VersionedTablet _tablet;

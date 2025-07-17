@@ -698,11 +698,65 @@ StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<ui
 StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* context) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
     auto tablet_metadata = tablet.metadata();
-    ASSIGN_OR_RETURN(auto compaction_policy,
-                     CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction));
-    ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
-    ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
+
+    std::vector<RowsetPtr> input_rowsets;
     std::vector<uint32_t> input_rowsets_id;
+    CompactionAlgorithm algorithm;
+    if (context->is_rs_range_compaction_executor_task) {
+        LOG(INFO) << "executor prepare to start rs compaction, tablet_id: " << context->tablet_id
+                  << ", txn_id: " << context->txn_id << ", input rowset ids: " << context->current_rs_rowset_ids.size()
+                  << ", algorithm: " << context->algorithm;
+        DCHECK(context->current_rs_rowset_ids.size() > 0);
+        algorithm = context->algorithm;
+        struct Finder {
+            uint32_t id;
+            bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
+        };
+        for (auto rowset_id : context->current_rs_rowset_ids) {
+            auto metadata = tablet.metadata();
+            auto iter = std::find_if(metadata->rowsets().begin(), metadata->rowsets().end(),
+                                     Finder{static_cast<uint32_t>(rowset_id)});
+            if (UNLIKELY(iter == metadata->rowsets().end())) {
+                return Status::InternalError(fmt::format("input rowset {} not found", rowset_id));
+            }
+
+            size_t rowset_index = std::distance(metadata->rowsets().begin(), iter);
+            LOG(INFO) << "executor rs compaction add new rowset, rowset_id: " << rowset_id
+                      << ", rowset_index: " << rowset_index << ", tablet_id: " << context->tablet_id
+                      << ", txn_id: " << context->txn_id;
+
+            input_rowsets_id.emplace_back(rowset_id);
+            input_rowsets.emplace_back(std::make_shared<Rowset>(tablet.tablet_manager(), tablet.metadata(),
+                                                                rowset_index, 0 /* compaction_segment_limit */));
+        }
+    } else {
+        ASSIGN_OR_RETURN(auto compaction_policy,
+                         CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction));
+        ASSIGN_OR_RETURN(input_rowsets, compaction_policy->pick_rowsets());
+        ASSIGN_OR_RETURN(algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
+
+        LOG(INFO) << "Lake compaction picked input rowset ids: " << print_rowset_ids(input_rowsets)
+                  << ", algorithm: " << algorithm << ", txn_id: " << context->txn_id;
+
+        if (context->enable_rs_range_compaction) {
+            // prerequisite: size of input_rowsets is larger than 1
+            if (input_rowsets.size() > 1) {
+                context->split_rowset_ranges_and_trigger_compact_rpc(&input_rowsets, algorithm);
+            } else {
+                // reset
+                context->enable_rs_range_compaction = false;
+            }
+        }
+
+        // Pay attention to the order, `input_rowsets_id` should build after `input_rowsets`
+        for (auto& rowset : input_rowsets) {
+            input_rowsets_id.emplace_back(rowset->id());
+        }
+    }
+
+    LOG(INFO) << "Lake compaction ready for compaction input rowset ids: " << print_rowset_ids(input_rowsets)
+              << ", algorithm: " << algorithm << ", txn_id: " << context->txn_id;
+
     size_t total_input_rowsets_file_size = 0;
     for (auto& rowset : input_rowsets) {
         input_rowsets_id.emplace_back(rowset->id());
@@ -721,6 +775,21 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
         return std::make_shared<CloudNativeIndexCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
                                                                 std::move(tablet_schema));
     }
+}
+
+std::string TabletManager::print_rowset_ids(std::vector<RowsetPtr> input_rowsets) {
+    std::stringstream ss;
+    ss << "[";
+    auto size = input_rowsets.size();
+    for (auto rowset_ptr : input_rowsets) {
+        auto id = rowset_ptr->id();
+        if (--size > 0) {
+            ss << id << ",";
+            continue;
+        }
+        ss << id << "]";
+    }
+    return ss.str();
 }
 
 // Store a copy of the tablet schema in a separate schema file named SCHEMA_{indexId}.

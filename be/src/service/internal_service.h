@@ -43,6 +43,7 @@
 #include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "util/countdown_latch.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -179,6 +180,10 @@ public:
     void process_dictionary_cache(google::protobuf::RpcController* controller,
                                   const PProcessDictionaryCacheRequest* request,
                                   PProcessDictionaryCacheResult* response, google::protobuf::Closure* done) override;
+
+    // lake compaction
+    void lake_compact_rowset_range(google::protobuf::RpcController* controller, const CompactRequest* request,
+                                   CompactResponse* response, google::protobuf::Closure* done) override;
 
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,

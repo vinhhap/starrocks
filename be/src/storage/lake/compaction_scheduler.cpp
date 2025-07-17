@@ -262,6 +262,8 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
                                                                request->force_base_compaction(), cb);
+        prepare_rs_compact(request, context.get(), tablet_id);
+
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
     }
@@ -287,6 +289,31 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     guard.release();
 
     TEST_SYNC_POINT("CompactionScheduler::compact:return");
+}
+
+void CompactionScheduler::prepare_rs_compact(const CompactRequest* request, CompactionTaskContext* context,
+                                             const int64_t tablet_id) {
+    // For rowset range compaction request, the coordinator BE need to split input rowsets into multiple ranges
+    // and send rpc to other executors to execute rowset range compaction.
+    // Right now, `force_rs_range_compaction` option is controlled by frontend compaction scheduler
+    if (request->force_rs_range_compaction()) {
+        context->enable_rs_range_compaction = true;
+        for (auto address : request->executor_addresses()) {
+            context->executor_node_infos.emplace_back(address);
+        }
+        LOG(INFO) << "Prepare force rs range compaction to other executors, tablet_id: " << tablet_id
+                  << ", txn_id: " << request->txn_id();
+        return;
+    }
+
+    // Request has got some `input_rowset_ids` as input, which means this is a part of a rowset range compaction job
+    if (request->input_rowset_ids_size() > 0) {
+        // todo: use seperate thread pool to handle rowset range compaction request from coordinator, to prevent deadlock
+        context->is_rs_range_compaction_executor_task = true;
+        context->algorithm = static_cast<CompactionAlgorithm>(request->algorithm());
+        context->current_rs_rowset_ids.assign(request->input_rowset_ids().begin(), request->input_rowset_ids().end());
+        LOG(INFO) << "Let's do rs range compaction, tablet_id: " << tablet_id << ", txn_id: " << request->txn_id();
+    }
 }
 
 void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {

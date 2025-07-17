@@ -1245,6 +1245,14 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
 }
 
+template <typename T>
+void PInternalServiceImplBase<T>::lake_compact_rowset_range(google::protobuf::RpcController* controller,
+                                                            const CompactRequest* request, CompactResponse* response,
+                                                            google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
 template class PInternalServiceImplBase<PInternalService>;
 template class PInternalServiceImplBase<doris::PBackendService>;
 

@@ -78,6 +78,17 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
     RETURN_IF_ERROR(writer->finish());
 
+    // For rowset range compaction, we should return as soon as possible while task on executor is finished
+    if (_context->is_rs_range_compaction_executor_task) {
+        RETURN_IF_ERROR(finish_rs_range_compaction(writer.get()));
+        return Status::OK();
+    }
+
+    // This is the coordinator role of rowset range compaction, should wait other executors to finish
+    if (_context->enable_rs_range_compaction) {
+        RETURN_IF_ERROR(_context->wait_rs_range_compact_response());
+    }
+
     // Adjust the progress here for 2 reasons:
     // 1. For primary key, due to the existence of the delete vector, the number of rows read may be less than the
     //    number of rows counted in the metadata.
@@ -90,6 +101,16 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     txn_log->set_tablet_id(_tablet.id());
     txn_log->set_txn_id(_txn_id);
     RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get()));
+
+    // iterate through _context->closure_vec for rowset range compact results
+    for (auto& closure : _context->closure_vec) {
+        auto status = fill_rs_range_compaction_segment_info(op_compaction, &closure->result);
+        if (!status.ok()) {
+            LOG(WARNING) << "Fail to fill rowset range compaction segment info. tablet: " << _tablet.id()
+                         << ", txn_id: " << _txn_id << ", status: " << status;
+        }
+    }
+
     op_compaction->set_compact_version(_tablet.metadata()->version());
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));

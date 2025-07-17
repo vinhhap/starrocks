@@ -43,6 +43,7 @@ import "status.proto";
 import "types.proto";
 import "olap_common.proto";
 import "olap_file.proto";
+import "lake_service.proto";
 import "lake_types.proto";
 
 option cc_generic_services = true;
@@ -684,4 +685,7 @@ service PInternalService {
     rpc exec_short_circuit(PExecShortCircuitRequest) returns (PExecShortCircuitResult);
 
     rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
+
+    // lake compaction
+    rpc lake_compact_rowset_range(CompactRequest) returns (CompactResponse);
 };

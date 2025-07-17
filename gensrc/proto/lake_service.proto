@@ -19,6 +19,7 @@ option java_package = "com.starrocks.proto";
 
 import "types.proto";
 import "lake_types.proto";
+import "olap_common.proto";
 import "status.proto";
 
 option cc_generic_services = true;
@@ -102,6 +103,12 @@ message CompactRequest {
     optional bool allow_partial_success = 5;
     optional bytes encryption_meta = 6;
     optional bool force_base_compaction = 7;
+
+    // for rowset range compact
+    optional bool force_rs_range_compaction = 20;
+    repeated int64 input_rowset_ids = 21;
+    optional int32 algorithm = 22;
+    repeated PNetworkAddress executor_addresses = 23;
 }
 
 message CompactStat {
@@ -125,16 +132,25 @@ message CompactStat {
     optional int32 in_queue_time_sec = 52;
 }
 
+message FileInfoPB {
+    optional string path = 1;
+    optional int64 size = 2;
+    optional string encryption_meta = 3;
+}
+
 message CompactResponse {
     repeated int64 failed_tablets = 1;
     // optional int64 execution_time = 2; // ms
     // optional int64 num_input_bytes = 3;
     // optional int64 num_input_rows = 4;
-    // optional int64 num_output_bytes = 5;
-    // optional int64 num_output_rows = 6;
+    optional int64 num_output_bytes = 5;
+    optional int64 num_output_rows = 6;
     optional StatusPB status = 7;
     repeated CompactStat compact_stats = 8;
     optional int64 success_compaction_input_file_size = 9;
+    repeated FileInfoPB files = 10;
+    repeated int64 input_rowset_ids = 11;
+    optional int64 num_input_rowset = 12;
 }
 
 message DropTableRequest {

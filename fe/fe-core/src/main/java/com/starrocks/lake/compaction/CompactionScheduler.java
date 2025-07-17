@@ -32,6 +32,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.proto.CompactRequest;
+import com.starrocks.proto.PNetworkAddress;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
@@ -437,6 +438,28 @@ public class CompactionScheduler extends Daemon {
             request.allowPartialSuccess = allowPartialSuccess;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            boolean forceRsRangeCompaction = request.forceBaseCompaction && Config.lake_force_enable_rowset_range_compaction;
+            if (forceRsRangeCompaction) {
+                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                Warehouse warehouse = manager.getCompactionWarehouse();
+                List<PNetworkAddress> networkAddresses = manager.getAliveComputeNodes(warehouse.getId())
+                        .stream()
+                        // exclude current compute node which is treated as a coordinator cn for distributed compaction
+                        .filter(computeNode -> !node.getHost().equals(computeNode.getHost()))
+                        .map(computeNode -> {
+                            PNetworkAddress networkAddress = new PNetworkAddress();
+                            networkAddress.host = computeNode.getHost();
+                            networkAddress.port = computeNode.getBrpcPort(); // use brpc port
+                            networkAddress.nodeId = computeNode.getId();
+                            return networkAddress;
+                        }).collect(Collectors.toList());
+
+                // only meaningful when there is at least one executor CN
+                if (!networkAddresses.isEmpty()) {
+                    request.forceRsRangeCompaction = true;
+                    request.executorAddresses = networkAddresses;
+                }
+            }
 
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);

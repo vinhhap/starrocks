@@ -49,6 +49,8 @@
 #include "runtime/runtime_filter_worker.h"
 #include "service/brpc.h"
 #include "storage/dictionary_cache_manager.h"
+#include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"
 #include "util/uid_util.h"
@@ -251,6 +253,40 @@ void BackendInternalServiceImpl<T>::local_tablet_reader_scan_get_next(google::pr
                                                                       google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
+void BackendInternalServiceImpl<T>::lake_compact_rowset_range(google::protobuf::RpcController* controller,
+                                                              const CompactRequest* request, CompactResponse* response,
+                                                              google::protobuf::Closure* done) {
+    LOG(INFO) << "receive compact rs range request: " << request->DebugString();
+
+    ClosureGuard closure_guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+    if (!request->has_txn_id()) {
+        cntl->SetFailed("missing txn_id");
+        return;
+    }
+    if (!request->has_version()) {
+        cntl->SetFailed("missing version");
+        return;
+    }
+    if (request->input_rowset_ids_size() == 0) {
+        cntl->SetFailed("missing input_rowset_ids");
+        return;
+    }
+    if (!request->has_algorithm()) {
+        cntl->SetFailed("missing algorithm");
+        return;
+    }
+
+    PInternalServiceImplBase<T>::_exec_env->lake_tablet_manager()->compaction_scheduler()->compact(
+            controller, request, response, closure_guard.release());
 }
 
 template class BackendInternalServiceImpl<PInternalService>;

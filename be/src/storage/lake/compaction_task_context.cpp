@@ -18,12 +18,16 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
+#include "runtime/exec_env.h"
+#include "storage/lake/rowset.h"
 #include "storage/olap_common.h"
+#include "util/brpc_stub_cache.h"
 
 namespace starrocks::lake {
 
 static constexpr long TIME_UNIT_NS_PER_SECOND = 1000000000;
 static constexpr long BYTES_UNIT_MB = 1048576;
+static constexpr long DEFAULT_COMPACTION_TIMEOUT_MS = 60000;
 
 void CompactionTaskStats::collect(const OlapReaderStatistics& reader_stats) {
     io_ns_remote = reader_stats.io_ns_remote;
@@ -108,5 +112,102 @@ std::string CompactionTaskStats::to_json_stats() {
     rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
     root.Accept(writer);
     return {strbuf.GetString()};
+}
+
+void CompactionTaskContext::split_rowset_ranges_and_trigger_compact_rpc(std::vector<RowsetPtr>* input_rowsets,
+                                                                        const CompactionAlgorithm& input_algorithm) {
+    LOG(INFO) << "split rowset ranges and trigger compact rpc, tablet_id=" << tablet_id << ", txn_id=" << txn_id
+              << ", version=" << version << ", total_rowsets=" << input_rowsets->size()
+              << ", input_algorithm=" << input_algorithm;
+    DCHECK(enable_rs_range_compaction && !input_rowsets->empty());
+    int executor_node_num = executor_node_infos.size();
+    const int total_rowsets = input_rowsets->size();
+    const int split_num = std::max(1, total_rowsets / (executor_node_num + 1));
+    DCHECK(split_num >= 1);
+
+    // all beginning rowsets will be split into a group (coordinator)
+    std::vector<RowsetPtr> coordinator_rowsets(input_rowsets->begin(), input_rowsets->begin() + split_num);
+
+    int start_index = split_num;
+    for (int i = 0; i < executor_node_num && start_index < total_rowsets; ++i) {
+        // build remote rs range compact request
+        CompactRequest request;
+        request.add_tablet_ids(tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(version);
+        request.set_algorithm(static_cast<int>(input_algorithm));
+
+        std::stringstream ss;
+        ss << "[";
+
+        int end_index;
+        if (i == executor_node_num - 1) {
+            // all remaining rowset will be split into a group
+            end_index = total_rowsets;
+        } else {
+            end_index = std::min(start_index + split_num, total_rowsets);
+        }
+
+        for (int j = start_index; j < end_index; j++) {
+            auto rs_id = (*input_rowsets)[j]->id();
+            request.add_input_rowset_ids(rs_id);
+            // for log
+            if (j != end_index - 1) {
+                ss << rs_id << ",";
+            } else {
+                ss << rs_id << "]";
+            }
+        }
+
+        closure_vec.emplace_back(new ReusableClosure<CompactResponse>());
+        auto closure = closure_vec.back();
+        closure->ref();
+        closure->reset();
+        closure->cntl.set_timeout_ms(config::lake_rowset_range_compaction_rpc_timeout_sec * 1000);
+        SET_IGNORE_OVERCROWDED(closure->cntl, compaction);
+
+        auto node_info = executor_node_infos[i];
+#ifndef BE_TEST
+        auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info.host(), node_info.port());
+        if (stub == nullptr) {
+            LOG(WARNING) << "Failed to Connect node: " << node_info.host() << ":" << node_info.port();
+            continue;
+        }
+        stub->lake_compact_rowset_range(&closure->cntl, &request, &closure->result, closure);
+#endif
+
+        LOG(INFO) << "Send rowset range scan compact request to " << node_info.host() << ":" << node_info.port()
+                  << ", rowset ids: " << ss.str() << ", tablet_id=" << tablet_id << ", txn_id=" << txn_id;
+
+        start_index = end_index;
+    }
+    all_input_rowsets = *input_rowsets; // make a copy into context
+    *input_rowsets = std::move(coordinator_rowsets);
+}
+
+// todo: support partial success
+Status CompactionTaskContext::wait_rs_range_compact_response() {
+    DCHECK(enable_rs_range_compaction);
+    if (closure_vec.empty()) {
+        LOG(INFO) << "No need to wait rowset range compaction response, txn_id: " << txn_id
+                  << ", tablet_id: " << tablet_id;
+        return Status::OK();
+    }
+    for (auto& closure : closure_vec) {
+        if (closure->join()) {
+            if (closure->cntl.Failed()) {
+                auto st = Status::InternalError(closure->cntl.ErrorText());
+                LOG(WARNING) << "Failed to send rowset range compation rpc, err=" << st;
+                return st;
+            }
+            Status st(closure->result.status());
+            if (!st.ok()) {
+                LOG(WARNING) << "Failed to send rowset range compation rpc, err=" << st;
+                return st;
+            }
+        }
+    }
+    LOG(INFO) << "All rowset range compaction response received, txn_id: " << txn_id << ", tablet_id: " << tablet_id;
+    return Status::OK();
 }
 } // namespace starrocks::lake

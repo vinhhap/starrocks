@@ -21,6 +21,9 @@
 #include <string>
 
 #include "common/status.h"
+#include "gen_cpp/lake_service.pb.h"
+#include "storage/compaction_utils.h"
+#include "util/reusable_closure.h"
 
 namespace starrocks {
 struct OlapReaderStatistics;
@@ -63,6 +66,9 @@ struct CompactionTaskStats {
     std::string to_json_stats();
 };
 
+class Rowset;
+using RowsetPtr = std::shared_ptr<Rowset>;
+
 // Context of a single tablet compaction task.
 struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_, bool force_base_compaction_,
@@ -76,12 +82,22 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
 #ifndef NDEBUG
     ~CompactionTaskContext() {
         CHECK(next() == this && previous() == this) << "Must remove CompactionTaskContext from list before destructor";
+        for (auto closure : closure_vec) {
+            if (closure != nullptr) {
+                closure->join();
+                if (closure->unref()) {
+                    delete closure;
+                }
+                closure = nullptr;
+            }
+        }
     }
 #endif
 
     const int64_t txn_id;
     const int64_t tablet_id;
     const int64_t version;
+    CompactionAlgorithm algorithm;
     const bool force_base_compaction;
     std::atomic<int64_t> start_time{0};
     std::atomic<int64_t> finish_time{0};
@@ -92,6 +108,20 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     int64_t enqueue_time_sec; // time point when put into queue
     std::shared_ptr<CompactionTaskCallback> callback;
     std::unique_ptr<CompactionTaskStats> stats = std::make_unique<CompactionTaskStats>();
+
+    // for rowset range compaction
+    std::vector<int64_t> current_rs_rowset_ids;
+    // input rowsets initially picked by coordinator *before* splitting
+    std::vector<RowsetPtr> all_input_rowsets;
+    std::atomic<bool> enable_rs_range_compaction{false};
+    std::atomic<bool> is_rs_range_compaction_executor_task{false}; // used for executor CN
+    std::vector<PNetworkAddress> executor_node_infos;              // infos come from frontend
+    std::vector<ReusableClosure<CompactResponse>*> closure_vec;
+
+    // split input_rowsets and call brpc for rowset range compact
+    void split_rowset_ranges_and_trigger_compact_rpc(std::vector<RowsetPtr>* input_rowsets,
+                                                     const CompactionAlgorithm& input_algorithm);
+    Status wait_rs_range_compact_response();
 
     std::string to_string() const {
         std::ostringstream out;

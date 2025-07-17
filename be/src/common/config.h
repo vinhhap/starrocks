@@ -704,6 +704,7 @@ CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
 // In the future we need to count the memory on each channel of the rpc. To do application layer rpc flow limiting.
 CONF_mBool(brpc_query_ignore_overcrowded, "false");
 CONF_mBool(brpc_load_ignore_overcrowded, "true");
+CONF_mBool(brpc_compaction_ignore_overcrowded, "false");
 
 // Max number of txns for every txn_partition_map in txn manager.
 // this is a self-protection to avoid too many txns saving in manager.
@@ -1112,6 +1113,8 @@ CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
 // if set to true, CACHE SELECT will only read file, save CPU time
 // if set to false, CACHE SELECT will behave like SELECT
 CONF_mBool(lake_cache_select_in_physical_way, "true");
+
+CONF_mInt32(lake_rowset_range_compaction_rpc_timeout_sec, "3600");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 

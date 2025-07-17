@@ -224,6 +224,7 @@ private:
     std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;
 
     bthreads::singleflight::Group<std::string, StatusOr<TabletSchemaPtr>> _schema_group;
+    std::string print_rowset_ids(std::vector<RowsetPtr> input_rowsets);
 };
 
 } // namespace starrocks::lake

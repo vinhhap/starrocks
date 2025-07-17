@@ -37,6 +37,7 @@
 syntax="proto2";
 
 import "internal_service.proto";
+import "lake_service.proto";
 
 package doris;
 option java_package = "com.starrocks.proto";
@@ -84,4 +85,7 @@ service PBackendService {
     rpc list_fail_point(starrocks.PListFailPointRequest) returns (starrocks.PListFailPointResponse);
 
     rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
+
+    // lake compaction
+    rpc lake_compact_rowset_range(starrocks.CompactRequest) returns (starrocks.CompactResponse);
 };
