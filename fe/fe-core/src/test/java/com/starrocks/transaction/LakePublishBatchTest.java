@@ -35,7 +35,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class LakePublishBatchTest {
@@ -415,5 +418,178 @@ public class LakePublishBatchTest {
         publishVersionDaemon.runAfterCatalogReady();
         Assert.assertTrue(waiter6.await(10, TimeUnit.SECONDS));
         Assert.assertTrue(waiter7.await(10, TimeUnit.SECONDS));
+    }
+
+    @Test
+    public void testBatchPublishShadowIndex() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), TABLE_SCHEMA_CHANGE);
+        assertEquals(1, table.getPartitions().size());
+        PhysicalPartition physicalPartition = table.getPartitions().iterator().next();
+        List<MaterializedIndex> normalIndices =
+                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+        assertEquals(1, normalIndices.size());
+        MaterializedIndex normalIndex = normalIndices.get(0);
+        assertEquals(1, normalIndex.getTablets().size());
+        LakeTablet normalTablet = (LakeTablet) normalIndex.getTablets().get(0);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        // txn1 only includes tablets of base index
+        long txn1 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "txn1" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        TransactionState txnState1 = globalTransactionMgr.getTransactionState(db.getId(), txn1);
+        txnState1.addTableIndexes((OlapTable) table);
+        List<TabletCommitInfo> commitInfo1 = commitAllTablets(List.of(normalTablet));
+
+        // do a schema change, which will create a shadow index
+        String alterSql = String.format("alter table %s add index idx (v0) using bitmap", TABLE_SCHEMA_CHANGE);
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+        List<AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
+        assertEquals(1, alterJobs.size());
+        assertInstanceOf(LakeTableSchemaChangeJob.class, alterJobs.get(0));
+        LakeTableSchemaChangeJob schemaChangeJob = (LakeTableSchemaChangeJob) alterJobs.get(0);
+        Awaitility.await().atMost(60, TimeUnit.SECONDS).until(
+                () -> schemaChangeJob.getJobState() == AlterJobV2.JobState.WAITING_TXN);
+
+        List<MaterializedIndex> shadowIndices =
+                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        assertEquals(1, shadowIndices.size());
+        MaterializedIndex shadowIndex = shadowIndices.get(0);
+        assertEquals(1, shadowIndex.getTablets().size());
+        LakeTablet shadowTablet = (LakeTablet) shadowIndex.getTablets().get(0);
+
+        // txn2 includes tablets of both base index and shadow index
+        long txn2 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "txn2" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        TransactionState txnState2 = globalTransactionMgr.getTransactionState(db.getId(), txn2);
+        txnState2.addTableIndexes((OlapTable) table);
+        List<TabletCommitInfo> commitInfo2 = commitAllTablets(List.of(normalTablet, shadowTablet));
+
+        // txn3 includes tablets of both base index and shadow index
+        long txn3 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "txn3" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        TransactionState txnState3 = globalTransactionMgr.getTransactionState(db.getId(), txn3);
+        txnState3.addTableIndexes((OlapTable) table);
+        List<TabletCommitInfo> commitInfo3 = commitAllTablets(List.of(normalTablet, shadowTablet));
+
+        // commit in the order of txn2, tnx1, and txn3
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), txn2, commitInfo2,
+                Lists.newArrayList(), null);
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), txn1, commitInfo1,
+                Lists.newArrayList(), null);
+        VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(db.getId(), txn3, commitInfo3,
+                Lists.newArrayList(), null);
+
+        PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+        publishVersionDaemon.runAfterCatalogReady();
+
+        Assertions.assertTrue(waiter1.await(1, TimeUnit.MINUTES));
+        Assertions.assertTrue(waiter2.await(1, TimeUnit.MINUTES));
+        Assertions.assertTrue(waiter3.await(1, TimeUnit.MINUTES));
+
+        ComputeNode shadowTabletNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_ID, shadowTablet);
+        LakeService lakeService = BrpcProxy.getLakeService(shadowTabletNode.getHost(), shadowTabletNode.getBrpcPort());
+        assertInstanceOf(MockedBackend.MockLakeService.class, lakeService);
+        MockedBackend.MockLakeService mockLakeService = (MockedBackend.MockLakeService) lakeService;
+        PublishLogVersionBatchRequest request = mockLakeService.pollPublishLogVersionBatchRequests();
+        assertNotNull(request);
+        assertEquals(List.of(shadowTablet.getId()), request.getTabletIds());
+        assertEquals(2, request.getTxnIds().size());
+        assertEquals(txn2, request.getTxnIds().get(0));
+        assertEquals(txn3, request.getTxnIds().get(1));
+    }
+
+    private List<TabletCommitInfo> commitAllTablets(List<LakeTablet> tablets) {
+        List<TabletCommitInfo> commitInfos = Lists.newArrayList();
+        List<Long> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds();
+        for (LakeTablet tablet : tablets) {
+            TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tablet.getId(), backends.get(0));
+            commitInfos.add(tabletCommitInfo);
+        }
+        return commitInfos;
+    }
+
+    @Test
+    public void testCheckStateBatchConsistent() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
+        List<TabletCommitInfo> transTablets = Lists.newArrayList();
+        for (Partition partition : table.getPartitions()) {
+            MaterializedIndex baseIndex = partition.getBaseIndex();
+            for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
+                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
+                    TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
+                    transTablets.add(tabletCommitInfo);
+                }
+            }
+        }
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long transactionId1 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        GlobalStateMgrTestUtil.testTxnLable1 + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId1, transTablets,
+                Lists.newArrayList(), null);
+
+        long transactionId2 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        GlobalStateMgrTestUtil.testTxnLable2 + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), transactionId2, transTablets,
+                Lists.newArrayList(), null);
+
+        {
+            TransactionStateBatch readyStateBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().get(0);
+            Assertions.assertEquals(2, readyStateBatch.size());
+
+            DatabaseTransactionMgr transactionMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
+            Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+
+            // keep origin version
+            Map<Partition, Long> partitionVersions = new HashMap<>();
+            for (Partition partition : table.getPartitions()) {
+                partitionVersions.put(partition, partition.getVisibleVersion());
+                partition.setVisibleVersion(0, System.currentTimeMillis());
+            }
+            Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+
+            // restore partition version
+            for (Map.Entry<Partition, Long> entry : partitionVersions.entrySet()) {
+                entry.getKey().setVisibleVersion(entry.getValue(), System.currentTimeMillis());
+            }
+            Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+
+            TransactionState transactionState2 = readyStateBatch.getTransactionStates().get(1);
+            Collection<PartitionCommitInfo> partitionCommitInfos = transactionState2.getTableCommitInfo(table.getId())
+                    .getIdToPartitionCommitInfo().values();
+            Map<PartitionCommitInfo, Long> originPartitionCommitInfos = new HashMap<>();
+            for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos) {
+                originPartitionCommitInfos.put(partitionCommitInfo, partitionCommitInfo.getVersion());
+                partitionCommitInfo.setVersion(99);
+            }
+            Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+
+            // restore
+            for (Map.Entry<PartitionCommitInfo, Long> entry : originPartitionCommitInfos.entrySet()) {
+                entry.getKey().setVersion(entry.getValue());
+            }
+            Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+
+            PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+            publishVersionDaemon.runAfterCatalogReady();
+        }
     }
 }
