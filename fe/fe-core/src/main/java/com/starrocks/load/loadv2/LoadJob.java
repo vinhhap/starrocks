@@ -1223,9 +1223,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         if (!txnOperated) {
             return;
         }
-        GlobalStateMgr.getCurrentState().getOperationListenerBus().onLoadJobTransactionFinish(txnState);
         unprotectUpdateLoadingStatus(txnState);
         updateState(JobState.FINISHED);
+        GlobalStateMgr.getCurrentState().getOperationListenerBus().onLoadJobTransactionFinish(txnState);
     }
 
     @Override

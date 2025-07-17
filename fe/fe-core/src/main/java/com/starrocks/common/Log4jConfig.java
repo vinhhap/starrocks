@@ -155,6 +155,21 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+            "   <RollingFile name=\"LoadsHistoryFile\" fileName=\"${loads_history_log_dir}/fe.loads_history.log\" filePattern=\"${loads_history_log_dir}/fe.loads_history.log.${loads_history_file_pattern}-%i\">\n" +
+            "      <PatternLayout charset=\"UTF-8\">\n" +
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n</Pattern>\n" +
+            "      </PatternLayout>\n" +
+            "      <Policies>\n" +
+            "        <TimeBasedTriggeringPolicy/>\n" +
+            "        <SizeBasedTriggeringPolicy size=\"${loads_history_log_roll_size_mb}MB\"/>\n" +
+            "      </Policies>\n" +
+            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "        <Delete basePath=\"${loads_history_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
+            "          <IfFileName glob=\"fe.loads_history.log.*\" />\n" +
+            "          <IfLastModified age=\"${loads_history_log_delete_age}\" />\n" +
+            "        </Delete>\n" +
+            "      </DefaultRolloverStrategy>\n" +
+            "    </RollingFile>\n" +
             "    <RollingFile name=\"InternalFile\" fileName=\"${internal_log_dir}/fe.internal.log\" filePattern=\"${internal_log_dir}/fe.internal.log.${internal_file_pattern}-%i\">\n" +
             "      ${syslog_default_layout}\n" +
             "      <Policies>\n" +
@@ -190,6 +205,9 @@ public class Log4jConfig extends XmlConfiguration {
             "    </Logger>\n" +
             "    <Logger name=\"profile\" level=\"INFO\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"ProfileFile\"/>\n" +
+            "    </Logger>\n" +
+            "    <Logger name=\"loads_history\" level=\"INFO\" additivity=\"false\">\n" +
+            "      <AppenderRef ref=\"LoadsHistoryFile\"/>\n" +
             "    </Logger>\n" +
             "<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->" +
             "  </Loggers>\n" +
@@ -275,6 +293,14 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("profile_log_delete_age", String.valueOf(Config.profile_log_delete_age));
         properties.put("profile_file_pattern",
                 getIntervalPattern("profile_log_roll_interval", Config.profile_log_roll_interval));
+
+        // loads history log config
+        properties.put("loads_history_log_dir", Config.loads_history_log_dir);
+        properties.put("loads_history_log_roll_size_mb", String.valueOf(Config.loads_history_log_roll_size_mb));
+        properties.put("loads_history_log_roll_num", String.valueOf(Config.loads_history_log_roll_num));
+        properties.put("loads_history_log_delete_age", String.valueOf(Config.loads_history_log_delete_age));
+        properties.put("loads_history_file_pattern",
+                getIntervalPattern("loads_history_log_roll_interval", Config.loads_history_log_roll_interval));
 
         // internal log config
         properties.put("internal_log_dir", Config.internal_log_dir);
