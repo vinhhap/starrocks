@@ -478,6 +478,14 @@ public class EtlStatus implements Writable {
             return totalSourceBytes;
         }
 
+        public synchronized long totalSinkLoadBytes() {
+            long totalSinkBytes = 0;
+            for (long bytes : sinkBytesCounterTbl.values()) {
+                totalSinkBytes += bytes;
+            }
+            return totalSinkBytes;
+        }
+
         public synchronized long totalSourceLoadRows() {
             long totalSourceRows = 0;
             for (long rows : sourceRowsCounterTbl.values()) {
