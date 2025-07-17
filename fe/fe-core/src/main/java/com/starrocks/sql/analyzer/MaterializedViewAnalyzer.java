@@ -189,7 +189,7 @@ public class MaterializedViewAnalyzer {
         return SUPPORTED_TABLE_TYPE.contains(table.getType()) || table instanceof OlapTable;
     }
 
-    private static boolean isExternalTableFromResource(Table table) {
+    public static boolean isExternalTableFromResource(Table table) {
         if (table instanceof OlapTable) {
             return false;
         } else if (table instanceof JDBCTable || table instanceof MysqlTable) {
