@@ -50,6 +50,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
@@ -1066,6 +1067,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     private boolean onReloadImpl(boolean postLoadImage) {
         long startMillis = System.currentTimeMillis();
+        ConnectContext connectContext = ConnectContext.buildInner();
+        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.setThreadLocalInfo();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
@@ -1174,7 +1179,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return;
         }
         // analyze expression, because it converts to sql for serialize
-        ConnectContext connectContext = ConnectContext.buildInner();
+        ConnectContext connectContext = Util.getOrCreateInnerContext();
         connectContext.setDatabase(db.getFullName());
         // set privilege
         connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
@@ -2134,6 +2139,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 return null;
             }
             ConnectContext connectContext = ConnectContext.buildInner();
+            connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+            connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
             if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
                 try {
                     String currentDBName = Strings.isNullOrEmpty(originalDBName) ? db.getOriginName() : originalDBName;
