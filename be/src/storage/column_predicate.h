@@ -176,7 +176,8 @@ public:
     }
 
     [[nodiscard]] virtual Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                                                     roaring::Roaring* row_bitmap) const {
+                                                     roaring::Roaring* row_bitmap,
+                                                     GinQueryOptions* gin_query_options) const {
         return Status::Cancelled("not implemented");
     }
 
