@@ -86,7 +86,8 @@ public class Checkpoint extends FrontendDaemon {
     }
 
     public Checkpoint(String name, Journal journal, String subDir, boolean belongToGlobalStateMgr) {
-        super(name, FeConstants.checkpoint_interval_second * 1000L);
+        super(name, Math.min(1800, Math.max(FeConstants.checkpoint_interval_second,
+                Config.checkpoint_interval_second)) * 1000L);
         this.imageDir = GlobalStateMgr.getServingState().getImageDir() + subDir;
         this.journal = journal;
         this.subDir = subDir;
