@@ -17,6 +17,7 @@ package com.starrocks.qe.scheduler;
 import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.common.Config;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
@@ -59,7 +60,7 @@ import static com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.Deploymen
 public class Deployer {
     private static final Logger LOG = LogManager.getLogger(Deployer.class);
     private static final ThreadPoolExecutor EXECUTOR =
-            ThreadPoolManager.newDaemonCacheThreadPool(ThreadPoolManager.cpuCores(),
+            ThreadPoolManager.newDaemonCacheThreadPool(Config.deploy_serialization_core_pool_size,
                     Integer.MAX_VALUE, "deployer", true);
 
     private final JobSpec jobSpec;
