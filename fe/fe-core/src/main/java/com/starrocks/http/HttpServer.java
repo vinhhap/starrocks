@@ -93,6 +93,7 @@ import com.starrocks.http.rest.SyncCloudTableMetaAction;
 import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
+import com.starrocks.http.rest.ThreadPoolOpAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
 import com.starrocks.leader.MetaHelper;
@@ -222,6 +223,8 @@ public class HttpServer {
         TableSchemaAction.registerAction(controller);
         TableQueryPlanAction.registerAction(controller);
         ReplicationAction.registerAction(controller);
+
+        ThreadPoolOpAction.registerAction(controller);
 
         BootstrapFinishAction.registerAction(controller);
     }
