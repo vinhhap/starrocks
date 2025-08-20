@@ -91,6 +91,7 @@ import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.DateTimeUtils;
 import org.apache.paimon.utils.PartitionPathUtils;
+import org.apache.paimon.utils.StringUtils;
 
 import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
@@ -306,7 +307,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             String column = partitionColumnNames.get(i);
             String value = partitionValues[i].trim();
             if (partitionColumnTypes.get(i) instanceof DateType) {
-                if (!partitionKey.nullPartitionValueList().contains(value)) {
+                if (!partitionKey.nullPartitionValueList().contains(value) && StringUtils.isNumeric(value)) {
                     value = DateTimeUtils.formatDate(Integer.parseInt(value));
                 }
             }
