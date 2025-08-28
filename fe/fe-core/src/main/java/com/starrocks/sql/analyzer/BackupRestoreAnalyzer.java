@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
@@ -77,7 +78,7 @@ public class BackupRestoreAnalyzer {
         public Void visitBackupStatement(BackupStmt backupStmt, ConnectContext context) {
             String dbName = getDbName(backupStmt.getDbName(), context);
             Database database = getDatabase(dbName, context);
-            analyzeLabelAndRepo(backupStmt.getLabel(), backupStmt.getRepoName());
+            analyzeLabelAndRepo(backupStmt.getLabel(), backupStmt.getRepoName(), context);
             Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
             List<TableRef> tableRefs = backupStmt.getTableRefs();
             // If TableRefs is empty, it means that we do not specify any table in Backup stmt.
@@ -249,6 +250,7 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitRestoreStatement(RestoreStmt restoreStmt, ConnectContext context) {
+            analyzeLabelAndRepo(restoreStmt.getLabel(), restoreStmt.getRepoName(), context);
             List<TableRef> tableRefs = restoreStmt.getTableRefs();
             Set<String> aliasSet = Sets.newHashSet();
             Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
@@ -369,7 +371,7 @@ public class BackupRestoreAnalyzer {
         return db;
     }
 
-    public static void analyzeLabelAndRepo(String label, String repoName) {
+    public static void analyzeLabelAndRepo(String label, String repoName, ConnectContext context) {
         if (Strings.isNullOrEmpty(label)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_LABEL_NAME, label);
         }
@@ -383,6 +385,13 @@ public class BackupRestoreAnalyzer {
         if (null == repo) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "Repository [" + repoName + "] does not exist");
+        }
+
+        if (repo.isServerlessBackupRepo()) {
+            if (!context.getCurrentUserIdentity().getUser().equals(AuthenticationMgr.ROOT_USER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Repository [" + repoName + "] only support operated by root");
+            }
         }
     }
 
