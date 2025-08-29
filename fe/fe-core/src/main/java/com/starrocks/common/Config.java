@@ -1805,6 +1805,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
 
+    @ConfField(mutable = true)
+    public static boolean enable_ignore_backup_task_info = true;
+
     /**
      * If set to true, metric collector will be run as a daemon timer to collect metrics at fix interval
      */
