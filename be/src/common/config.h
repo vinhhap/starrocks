@@ -1538,4 +1538,7 @@ CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 CONF_mInt32(big_query_sec, "1");
+
+// Whether use murmur_hash3_x64_64 to calculate hash64
+CONF_mBool(enable_murmur_hash3_x64_64_for_bitmap_hash64_function, "false");
 } // namespace starrocks::config
