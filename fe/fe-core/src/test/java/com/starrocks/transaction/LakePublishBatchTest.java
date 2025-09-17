@@ -23,7 +23,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -420,16 +419,6 @@ public class LakePublishBatchTest {
         publishVersionDaemon.runAfterCatalogReady();
         Assert.assertTrue(waiter6.await(10, TimeUnit.SECONDS));
         Assert.assertTrue(waiter7.await(10, TimeUnit.SECONDS));
-    }
-
-    private List<TabletCommitInfo> commitAllTablets(List<LakeTablet> tablets) {
-        List<TabletCommitInfo> commitInfos = Lists.newArrayList();
-        List<Long> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds();
-        for (LakeTablet tablet : tablets) {
-            TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tablet.getId(), backends.get(0));
-            commitInfos.add(tabletCommitInfo);
-        }
-        return commitInfos;
     }
 
     @Test
