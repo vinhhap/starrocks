@@ -676,6 +676,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.HIVE_SCAN_NO_PROJECT);
         ruleRewriteIterative(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.ICEBERG_SCAN_NO_PROJECT);
         ruleRewriteIterative(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.FILE_SCAN_NO_PROJECT);
+        ruleRewriteIterative(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.PAIMON_SCAN_NO_PROJECT);
 
         // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
         // select count(distinct c) from t group by a, b

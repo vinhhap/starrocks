@@ -470,6 +470,7 @@ public class RuleSet {
                 RewriteSimpleAggToHDFSScanRule.FILE_SCAN,
                 RewriteSimpleAggToHDFSScanRule.HIVE_SCAN,
                 RewriteSimpleAggToHDFSScanRule.ICEBERG_SCAN,
+                RewriteSimpleAggToHDFSScanRule.PAIMON_SCAN,
                 new MinMaxCountOptOnScanRule()
         ));
     }

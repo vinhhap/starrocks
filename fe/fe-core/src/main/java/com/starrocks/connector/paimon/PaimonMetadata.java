@@ -413,9 +413,13 @@ public class PaimonMetadata implements ConnectorMetadata {
             ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
             int[] projected = fieldNames.stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, predicate);
+            readBuilder = readBuilder.withFilter(predicates);
+            boolean countOptimize = fieldNames.size() == 1 && fieldNames.get(0).equalsIgnoreCase("___COUNT___");
+            if (!countOptimize) {
+                readBuilder = readBuilder.withProjection(projected);
+            }
             boolean pruneManifestsByLimit = limit != -1 && limit < Integer.MAX_VALUE
                     && onlyHasPartitionPredicate(table, predicate);
-            readBuilder = readBuilder.withFilter(predicates).withProjection(projected);
             if (pruneManifestsByLimit) {
                 readBuilder = readBuilder.withLimit((int) limit);
             }
