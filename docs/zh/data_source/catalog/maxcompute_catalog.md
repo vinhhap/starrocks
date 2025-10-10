@@ -74,8 +74,10 @@ StarRocks 访问 MaxCompute 集群文件存储的相关参数配置。此组参�
 
 | 参数                  | 是否必须 | 说明                                                                                        |
 |----------------------|---------|--------------------------------------------------------------------------------------------|
-| odps.split.policy    | 否      | 扫描数据时所使用的分片策略。<br />取值范围：`size`（按数据大小分片）、`row_offset`（按行数分片）。默认值：`size`。<br />           |
-| odps.split.row.count | 否      | 当 `odps.split.policy` 设置为 `row_offset` 时，每个分片的最大行数。<br />默认值：`4 * 1024 * 1024 = 4194304`。<br /> |
+| odps.split.policy    | 否    | 数据扫描时使用的分片策略。<br />有效值：`size`（按数据大小分片）和 `row_offset`（按行数分片）。默认值：`size`。<br />                                  |
+| odps.split.size.limit | 否    | 当 `odps.split.policy` 设置为 `size` 时每个分片的最大数据大小。<br />默认值：`32 * 1024 * 1024 = 33554432 (32MB)`。<br />            |
+| odps.split.row.count | 否    | 当 `odps.split.policy` 设置为 `row_offset` 时每个分片的最大行数。<br />默认值：`4 * 1024 * 1024 = 4194304`。<br />                 |
+| odps.predicate.pushdown.enable  | 否    | 是否启用谓词下推，将谓词下推到 MaxCompute Scan 算子。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示启用过滤条件，取值为 `false` 表示不启用过滤条件。 |
 
 ##### CachingMetaParams
 

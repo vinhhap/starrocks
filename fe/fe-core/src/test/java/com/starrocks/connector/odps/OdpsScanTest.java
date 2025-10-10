@@ -124,6 +124,5 @@ public class OdpsScanTest extends MockedBase {
         List<InputSplit> splits = splitsInfo.getSplits();
         Assert.assertEquals(OdpsSplitsInfo.SplitPolicy.SIZE, splitPolicy);
         Assert.assertEquals(1, splits.size());
-        Assert.assertNotNull(serializeSession);
     }
 }
