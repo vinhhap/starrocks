@@ -204,19 +204,4 @@ TEST_F(CompactionTaskContextTest, test_to_string) {
     }
 }
 
-TEST_F(CompactionTaskContextTest, test_split_rowset_ranges_and_trigger_compact_rpc) {
-    CompactionTaskContext context(txn_id, tablet_id, version, force_base_compaction, callback);
-
-    std::vector<RowsetPtr> input_rowsets;
-    for (int i = 0; i < 10; i++) {
-        input_rowsets.emplace_back(new MockRowset());
-    }
-
-    context.force_rs_range_compaction = true;
-
-    std::vector<PNetworkAddress> executor_node_infos;
-    executor_node_infos.emplace_back("host1", 8030);
-    executor_node_infos.emplace_back("host2", 8030);
-    context.executor_node_infos = executor_node_infos;
-}
 } // namespace starrocks::lake

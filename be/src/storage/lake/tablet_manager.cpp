@@ -735,8 +735,8 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
         ASSIGN_OR_RETURN(input_rowsets, compaction_policy->pick_rowsets());
         ASSIGN_OR_RETURN(algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
 
-        LOG(INFO) << "Lake compaction picked input rowset ids: " << print_rowset_ids(input_rowsets)
-                  << ", algorithm: " << algorithm << ", txn_id: " << context->txn_id;
+        VLOG(3) << "Lake compaction picked input rowset ids: " << print_rowset_ids(input_rowsets)
+                << ", algorithm: " << algorithm << ", txn_id: " << context->txn_id;
 
         if (context->enable_rs_range_compaction) {
             // prerequisite: size of input_rowsets is larger than 1
@@ -754,8 +754,8 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
         }
     }
 
-    LOG(INFO) << "Lake compaction ready for compaction input rowset ids: " << print_rowset_ids(input_rowsets)
-              << ", algorithm: " << algorithm << ", txn_id: " << context->txn_id;
+    VLOG(3) << "Lake compaction ready for compaction input rowset ids: " << print_rowset_ids(input_rowsets)
+            << ", algorithm: " << algorithm << ", txn_id: " << context->txn_id;
 
     size_t total_input_rowsets_file_size = 0;
     for (auto& rowset : input_rowsets) {
