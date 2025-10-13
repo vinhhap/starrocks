@@ -512,7 +512,7 @@ void init_staros_worker() {
     fslib::FLAGS_index_cache_disk_size_bytes = config::starlet_index_cache_disk_size_bytes;
     fslib::FLAGS_index_cache_block_size_bytes = config::starlet_index_cache_block_size_bytes;
     fslib::FLAGS_star_cache_enable_stat = config::starlet_enable_cache_stat;
-    fslib::FLAGS_star_cache_meta_size_bytes = config::starlet_star_cache_meta_size_bytes;
+    fslib::FLAGS_star_cache_tablet_meta_size_bytes = config::starlet_tablet_meta_size_bytes;
     fslib::FLAGS_star_cache_enable_adaptor = config::starlet_enable_io_adaptor;
     fslib::FLAGS_star_cache_skip_read_factor = config::starlet_skip_read_factor;
 
@@ -543,6 +543,14 @@ void update_staros_starcache() {
     if (fslib::FLAGS_star_cache_mem_size_percent != config::starlet_star_cache_mem_size_percent) {
         fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
         (void)fslib::star_cache_update_memory_quota_percent(fslib::FLAGS_star_cache_mem_size_percent);
+    }
+
+    if (fslib::FLAGS_star_cache_tablet_meta_size_bytes != config::starlet_tablet_meta_size_bytes) {
+        fslib::FLAGS_star_cache_tablet_meta_size_bytes = config::starlet_tablet_meta_size_bytes;
+        auto status = fslib::star_cache_update_tablet_meta_quota_bytes(fslib::FLAGS_star_cache_tablet_meta_size_bytes);
+        if (!status.ok()) {
+            LOG(ERROR) << "update starlet_tablet_meta_size_bytes failed, errmsg: " << status.ToString();
+        }
     }
 
     if (fslib::FLAGS_star_cache_mem_size_bytes != config::starlet_star_cache_mem_size_bytes) {
