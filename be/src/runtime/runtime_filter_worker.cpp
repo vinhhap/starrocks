@@ -34,6 +34,7 @@
 #include "util/internal_service_recoverable_stub.h"
 #include "util/thread.h"
 #include "util/time.h"
+#include "util/time_guard.h"
 
 namespace starrocks {
 
@@ -895,6 +896,7 @@ void RuntimeFilterWorker::execute() {
         if (!_queue.blocking_get(&ev)) {
             break;
         }
+        DUMP_TRACE_IF_TIMEOUT(config::pipeline_rf_worker_timeout_guard_ms);
 
         LOG_IF_EVERY_N(INFO, _queue.get_size() > CpuInfo::num_cores() * 10, 10)
                 << "runtime filter worker queue may be too large, size: " << _queue.get_size();
