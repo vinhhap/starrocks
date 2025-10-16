@@ -26,9 +26,11 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -49,10 +51,13 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
 
 public class LakeTableAlterMetaJobTest {
     private static final String DB_NAME = "test";
@@ -363,5 +368,27 @@ public class LakeTableAlterMetaJobTest {
         ExceptionChecker.expectThrows(DdlException.class,
                 () -> schemaChangeHandler.createAlterMetaJob(modify, db, table2));
 
+    }
+
+    @Test
+    public void testGetInfo() throws Exception {
+        LakeTable table = createTable(connectContext,
+                "CREATE TABLE info(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                        "PROPERTIES('enable_persistent_index'='true')");
+
+        String alterStmtStr = "alter table test.info set ('enable_persistent_index'='false')";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        Map<String, String> properties = new HashMap<>();
+        properties.put("enable_persistent_index", "false");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table);
+        job.runPendingJob();
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+
+        Assertions.assertEquals(infos.size(), 1);
     }
 }
