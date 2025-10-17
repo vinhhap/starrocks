@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFlussScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
@@ -59,6 +60,8 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN, true);
     public static final RewriteSimpleAggToHDFSScanRule PAIMON_SCAN_NO_PROJECT =
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_PAIMON_SCAN, true);
+    public static final RewriteSimpleAggToHDFSScanRule FLUSS_SCAN_NO_PROJECT =
+            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FLUSS_SCAN, true);
 
     public static final RewriteSimpleAggToHDFSScanRule HIVE_SCAN =
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN);
@@ -68,6 +71,8 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN);
     public static final RewriteSimpleAggToHDFSScanRule PAIMON_SCAN =
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_PAIMON_SCAN);
+    public static final RewriteSimpleAggToHDFSScanRule FLUSS_SCAN =
+            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FLUSS_SCAN);
 
     final OperatorType scanOperatorType;
     final boolean hasProjectOperator;
@@ -165,6 +170,9 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
         } else if (scanOperator instanceof LogicalPaimonScanOperator) {
             newMetaScan = new LogicalPaimonScanOperator(scanOperator.getTable(),
+                    newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
+        } else if (scanOperator instanceof LogicalFlussScanOperator) {
+            newMetaScan = new LogicalFlussScanOperator(scanOperator.getTable(),
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
         } else {
             LOG.warn("Unexpected scan operator: " + scanOperator);

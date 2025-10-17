@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ExceptImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.FileScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.FilterImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.FlussScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
@@ -181,6 +182,7 @@ public class RuleSet {
             new HudiScanImplementationRule(),
             new DeltaLakeScanImplementationRule(),
             new PaimonScanImplementationRule(),
+            new FlussScanImplementationRule(),
             new OdpsScanImplementationRule(),
             new IcebergMetadataScanImplementationRule(),
             new KuduScanImplementationRule(),
@@ -241,6 +243,7 @@ public class RuleSet {
                 MergeLimitDirectRule.DELTALAKE_SCAN,
                 MergeLimitDirectRule.FILE_SCAN,
                 MergeLimitDirectRule.PAIMON_SCAN,
+                MergeLimitDirectRule.FLUSS_SCAN,
                 MergeLimitDirectRule.ODPS_SCAN,
                 MergeLimitDirectRule.KUDU_SCAN,
                 MergeLimitDirectRule.SCHEMA_SCAN,
@@ -267,6 +270,7 @@ public class RuleSet {
                 ExternalScanPartitionPruneRule.FILE_SCAN,
                 ExternalScanPartitionPruneRule.ES_SCAN,
                 ExternalScanPartitionPruneRule.PAIMON_SCAN,
+                ExternalScanPartitionPruneRule.FLUSS_SCAN,
                 ExternalScanPartitionPruneRule.ODPS_SCAN,
                 ExternalScanPartitionPruneRule.KUDU_SCAN,
                 new LimitPruneTabletsRule()
@@ -284,6 +288,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.HUDI_SCAN,
                 PruneHDFSScanColumnRule.TABLE_FUNCTION_TABLE_SCAN,
                 PruneHDFSScanColumnRule.PAIMON_SCAN,
+                PruneHDFSScanColumnRule.FLUSS_SCAN,
                 PruneHDFSScanColumnRule.ODPS_SCAN,
                 PruneScanColumnRule.KUDU_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
@@ -315,6 +320,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.DELTALAKE_SCAN,
                 PushDownPredicateScanRule.FILE_SCAN,
                 PushDownPredicateScanRule.PAIMON_SCAN,
+                PushDownPredicateScanRule.FLUSS_SCAN,
                 PushDownPredicateScanRule.ODPS_SCAN,
                 PushDownPredicateScanRule.ICEBERG_METADATA_SCAN,
                 PushDownPredicateScanRule.KUDU_SCAN,
@@ -429,6 +435,7 @@ public class RuleSet {
                 PruneEmptyScanRule.HUDI_SCAN,
                 PruneEmptyScanRule.ICEBERG_SCAN,
                 PruneEmptyScanRule.PAIMON_SCAN,
+                PruneEmptyScanRule.FLUSS_SCAN,
                 PruneEmptyScanRule.ODPS_SCAN,
                 PruneEmptyScanRule.KUDU_SCAN,
                 PruneEmptyJoinRule.JOIN_LEFT_EMPTY,
@@ -471,6 +478,7 @@ public class RuleSet {
                 RewriteSimpleAggToHDFSScanRule.HIVE_SCAN,
                 RewriteSimpleAggToHDFSScanRule.ICEBERG_SCAN,
                 RewriteSimpleAggToHDFSScanRule.PAIMON_SCAN,
+                RewriteSimpleAggToHDFSScanRule.FLUSS_SCAN,
                 new MinMaxCountOptOnScanRule()
         ));
     }

@@ -322,6 +322,19 @@ private:
     TIcebergSchema _t_paimon_schema;
 };
 
+class FlussTableDescriptor : public HiveTableDescriptor {
+public:
+    FlussTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~FlussTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
+    const std::string& get_table_conf() const;
+    const std::string& get_time_zone() const;
+
+private:
+    std::string _table_conf;
+    std::string _time_zone;
+};
+
 class OdpsTableDescriptor : public HiveTableDescriptor {
 public:
     OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);

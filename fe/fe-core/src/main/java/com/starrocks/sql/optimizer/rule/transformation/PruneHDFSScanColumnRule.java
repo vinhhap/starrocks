@@ -54,6 +54,8 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_FILE_SCAN);
     public static final PruneHDFSScanColumnRule PAIMON_SCAN =
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_PAIMON_SCAN);
+    public static final PruneHDFSScanColumnRule FLUSS_SCAN =
+            new PruneHDFSScanColumnRule(OperatorType.LOGICAL_FLUSS_SCAN);
     public static final PruneHDFSScanColumnRule ODPS_SCAN =
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_ODPS_SCAN);
 

@@ -399,6 +399,12 @@ struct THdfsScanRange {
 
     // is this scan range the first split of this file?
     29: optional bool is_first_split
+
+    // whether to use JNI scanner to read data of paimon table
+    30: optional bool use_fluss_jni_reader
+
+    // fluss split info
+    31: optional string fluss_split_info
 }
 
 struct TBinlogScanRange {

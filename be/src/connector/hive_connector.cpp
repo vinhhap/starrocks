@@ -643,6 +643,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_paimon_jni_reader) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
+    bool use_fluss_jni_reader = false;
+    if (scan_range.__isset.use_fluss_jni_reader) {
+        use_fluss_jni_reader = scan_range.use_fluss_jni_reader;
+    }
     bool use_odps_jni_reader = false;
     if (scan_range.__isset.use_odps_jni_reader) {
         use_odps_jni_reader = scan_range.use_odps_jni_reader;
@@ -666,6 +670,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = new HdfsPartitionScanner();
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
+    } else if (use_fluss_jni_reader) {
+        scanner = create_fluss_jni_scanner(jni_scanner_create_options).release();
     } else if (use_hudi_jni_reader) {
         scanner = create_hudi_jni_scanner(jni_scanner_create_options).release();
     } else if (use_odps_jni_reader) {
