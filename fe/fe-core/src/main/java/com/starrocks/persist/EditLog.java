@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
+import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authentication.UserPropertyInfo;
@@ -116,6 +117,8 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.MultiTxnState;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStateBatch;
 import com.starrocks.warehouse.Warehouse;
@@ -590,6 +593,28 @@ public class EditLog {
                     final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.getData();
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
                     LOG.debug("opcode: {}, txn ids: {}", opCode, stateBatch.getTxnIds());
+                    break;
+                }
+                case OperationType.OP_UPSERT_MULTI_TRANSACTION_STATE: {
+                    final MultiTxnState state = (MultiTxnState) journal.getData();
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().replayMultiTxn(state);
+                    LOG.debug("opcode: {}, multi txn id: {}", opCode, state.getTxnId());
+                    break;
+                }
+                case OperationType.OP_MULTI_TRANSACTION_ADD_COMMIT_TXN_INFO: {
+                    final MultiTransactionInfo info = (MultiTransactionInfo) journal.getData();
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                            .replayMultiTxnAddCommitInfo(info.getTxnId(), info.getCommitTxnInfo());
+                    LOG.debug("opcode: {}, multi txn id: {}, transaction id: {}",
+                            opCode, info.getTxnId(), info.getCommitTxnInfo().getTransactionId());
+                    break;
+                }
+                case OperationType.OP_MULTI_TRANSACTION_ADD_TABLE: {
+                    final MultiTransactionAddTableInfo info = (MultiTransactionAddTableInfo) journal.getData();
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                            .replayMultiTxnAddTableInfo(info.getTxnId(), info.getTableName());
+                    LOG.debug("opcode: {}, multi txn id: {}, table name: {}",
+                            opCode, info.getTxnId(), info.getTableName());
                     break;
                 }
                 case OperationType.OP_CREATE_REPOSITORY:
@@ -1588,6 +1613,20 @@ public class EditLog {
         ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
                 snapshotPaths, exportTempPath, exportedFiles, failMsg);
         logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
+    }
+
+    public void logMultiTransactionState(MultiTxnState multiTxnState) {
+        logJsonObject(OperationType.OP_UPSERT_MULTI_TRANSACTION_STATE, multiTxnState);
+    }
+
+    public void logMultiTransactionAddCommitTxnInfo(long txnId, GlobalTransactionMgr.CommitTxnInfo txnInfo) {
+        MultiTransactionInfo info = new MultiTransactionInfo(txnId, txnInfo);
+        logJsonObject(OperationType.OP_MULTI_TRANSACTION_ADD_COMMIT_TXN_INFO, info);
+    }
+
+    public void logMultiTransactionAddTableInfo(long txnId, TableName tableName) {
+        MultiTransactionAddTableInfo info = new MultiTransactionAddTableInfo(txnId, tableName);
+        logJsonObject(OperationType.OP_MULTI_TRANSACTION_ADD_TABLE, info);
     }
 
     // for TransactionState

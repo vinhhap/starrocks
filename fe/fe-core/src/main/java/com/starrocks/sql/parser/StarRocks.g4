@@ -314,6 +314,11 @@ statement
     // Translate Statement
     | translateStatement
 
+    // Multi-statement transaction
+    | beginTxnStatement
+    | commitTxnStatement
+    | rollbackTxnStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -1960,6 +1965,20 @@ dialect
 
 translateSQL
     : .+
+    ;
+
+// ------------------------------------------- Multi-statement Transaction --------------------------------------------
+
+beginTxnStatement
+    : BEGIN TRANSACTION?
+    ;
+
+commitTxnStatement
+    : COMMIT (txn_id = identifier)?
+    ;
+
+rollbackTxnStatement
+    : ROLLBACK (txn_id = identifier)?
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------

@@ -111,6 +111,8 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
+import com.starrocks.persist.MultiTransactionAddTableInfo;
+import com.starrocks.persist.MultiTransactionInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
@@ -160,6 +162,7 @@ import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
+import com.starrocks.transaction.MultiTxnState;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStateBatch;
 import com.starrocks.warehouse.Warehouse;
@@ -519,6 +522,18 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
                 data = TransactionStateBatch.read(in);
+                break;
+            }
+            case OperationType.OP_UPSERT_MULTI_TRANSACTION_STATE: {
+                data = MultiTxnState.read(in);
+                break;
+            }
+            case OperationType.OP_MULTI_TRANSACTION_ADD_COMMIT_TXN_INFO: {
+                data = MultiTransactionInfo.read(in);
+                break;
+            }
+            case OperationType.OP_MULTI_TRANSACTION_ADD_TABLE: {
+                data = MultiTransactionAddTableInfo.read(in);
                 break;
             }
             case OperationType.OP_CREATE_REPOSITORY: {

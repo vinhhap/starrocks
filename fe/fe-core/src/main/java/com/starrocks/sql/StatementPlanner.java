@@ -511,6 +511,24 @@ public class StatementPlanner {
         }
 
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        if (session.getRunningMultiTxnId() != -1) {
+            long waitDeadLineMs = System.currentTimeMillis() + session.getSessionVariable().getQueryTimeoutS() * 1000L;
+            // maybe deadlock here
+            while (transactionMgr.hasBlockingTxns(stmt.getTableName())) {
+                try {
+                    LOG.info("Waiting for table {} when initiating multi transaction {}.",
+                            stmt.getTableName(), session.getRunningMultiTxnId());
+                    Thread.sleep(Config.multi_txn_check_interval_seconds * 1000L);
+                    if (System.currentTimeMillis() > waitDeadLineMs) {
+                        throw new BeginTransactionException("Timeout while waiting for the table to be available.");
+                    }
+                } catch (InterruptedException e) {
+                    throw new BeginTransactionException("Interrupted while waiting for the table to be available.");
+                }
+            }
+            transactionMgr.addMultiTxnTable(session.getRunningMultiTxnId(), stmt.getTableName());
+        }
+
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         long txnId = DmlStmt.INVALID_TXN_ID;
         if (targetTable instanceof ExternalOlapTable) {

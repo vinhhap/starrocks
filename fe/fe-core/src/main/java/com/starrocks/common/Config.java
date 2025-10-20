@@ -42,6 +42,9 @@ import com.starrocks.statistic.sample.NDVEstimator;
 
 public class Config extends ConfigBase {
 
+    @ConfField(mutable = true)
+    public static boolean enable_multi_transaction = false;
+
     /**
      * The max size of one sys log and audit log
      */
@@ -364,6 +367,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int label_keep_max_num = 1000;
+
+    @ConfField(mutable = true)
+    public static int multi_txn_expire_seconds = 24 * 3600; // 1 day
 
     /**
      * StreamLoadTasks hold by StreamLoadMgr will be cleaned
@@ -1095,6 +1101,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_stream_load_batch_size_mb = 100;
+
+    @ConfField(mutable = true)
+    public static int multi_txn_check_interval_seconds = 2;
 
     /**
      * Stream load max txn num per BE, less than 0 means no limit

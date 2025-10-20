@@ -37,6 +37,8 @@ package com.starrocks.transaction;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -47,9 +49,12 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.load.EtlJobType;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageWriter;
@@ -69,15 +74,22 @@ import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -93,6 +105,106 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(GlobalTransactionMgr.class);
 
     private final Map<Long, DatabaseTransactionMgr> dbIdToDatabaseTransactionMgrs = Maps.newConcurrentMap();
+
+    public class CommitTxnInfo implements Writable {
+        @SerializedName("db")
+        private final Database db;
+        @SerializedName("transactionId")
+        private final long transactionId;
+        @SerializedName("loadJobId")
+        private final long loadJobId;
+        @SerializedName("tabletCommitInfos")
+        private final List<TabletCommitInfo> tabletCommitInfos;
+        @SerializedName("tabletFailInfos")
+        private final List<TabletFailInfo> tabletFailInfos;
+        @SerializedName("txnCommitAttachment")
+        private final TxnCommitAttachment txnCommitAttachment;
+        @SerializedName("timeoutMs")
+        private final long timeoutMs;
+        @SerializedName("transactionVisibleWaitTimeout")
+        private final long transactionVisibleWaitTimeout;
+        @SerializedName("tableId")
+        private final long tableId;
+        @SerializedName("loadedRows")
+        private final long loadedRows;
+        @SerializedName("loadedBytes")
+        private final long loadedBytes;
+        @SerializedName("trackingSql")
+        private final String trackingSql;
+
+        public CommitTxnInfo(Database db, long transactionId, long jobId, List<TabletCommitInfo> tabletCommitInfos,
+                             List<TabletFailInfo> tabletFailInfos, TxnCommitAttachment txnCommitAttachment, long timeoutMs,
+                             long transactionVisibleWaitTimeout, long tableId, long loadedRows, long loadedBytes,
+                             String trackingSql) {
+            this.db = db;
+            this.transactionId = transactionId;
+            this.loadJobId = jobId;
+            this.tabletCommitInfos = tabletCommitInfos;
+            this.tabletFailInfos = tabletFailInfos;
+            this.txnCommitAttachment = txnCommitAttachment;
+            this.timeoutMs = timeoutMs;
+            this.transactionVisibleWaitTimeout = transactionVisibleWaitTimeout;
+            this.tableId = tableId;
+            this.loadedRows = loadedRows;
+            this.loadedBytes = loadedBytes;
+            this.trackingSql = trackingSql;
+        }
+
+        public Database getDb() {
+            return db;
+        }
+
+        public long getTransactionId() {
+            return transactionId;
+        }
+
+        public long getLoadJobId() {
+            return loadJobId;
+        }
+
+        public List<TabletCommitInfo> getTabletCommitInfos() {
+            return tabletCommitInfos;
+        }
+
+        public List<TabletFailInfo> getTabletFailInfos() {
+            return tabletFailInfos;
+        }
+
+        public TxnCommitAttachment getTxnCommitAttachment() {
+            return txnCommitAttachment;
+        }
+
+        public long getTimeoutMs() {
+            return timeoutMs;
+        }
+
+        public long getTransactionVisibleWaitTimeout() {
+            return transactionVisibleWaitTimeout;
+        }
+
+        public long getTableId() {
+            return tableId;
+        }
+
+        public long getLoadedRows() {
+            return loadedRows;
+        }
+
+        public long getLoadedBytes() {
+            return loadedBytes;
+        }
+
+        public String getTrackingSql() {
+            return trackingSql;
+        }
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+        }
+    }
+
+    private Map<Long, MultiTxnState> txnIdToState = Maps.newConcurrentMap();
+    private final Map<Long, Queue<CommitTxnInfo>> runningMultiTxnDetail = Maps.newConcurrentMap();
 
     private TransactionIdGenerator idGenerator = new TransactionIdGenerator();
     private final TxnStateCallbackFactory callbackFactory = new TxnStateCallbackFactory();
@@ -921,5 +1033,209 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
         return Lists.newArrayList(Pair.create(txnSamples, (long) getTransactionNum()),
                 Pair.create(callbackSamples, callbackFactory.getCallBackCnt()));
+    }
+
+    private final Lock lock = new ReentrantLock();
+    private final Condition cv = lock.newCondition();
+    private long runningTransactionId = -1;
+    public long beginMultiTransaction(int connId, long expireTimeMs) {
+        long txnId = getTransactionIDGenerator().getNextTransactionId();
+
+        lock.lock();
+        try {
+            while (runningTransactionId != -1) {
+                LOG.warn("Begin multi transaction for connection {}, but a running transaction(id={})" +
+                        " has already exists.", connId, runningTransactionId);
+                long currentTimeMs = System.currentTimeMillis();
+                if (currentTimeMs >= expireTimeMs) {
+                    return -1;
+                }
+                long availableTimeMs = expireTimeMs - currentTimeMs;
+                if (!cv.await(availableTimeMs, TimeUnit.MILLISECONDS)) {
+                    return -1;
+                }
+            }
+            runningTransactionId = txnId;
+        } catch (InterruptedException ie) {
+            LOG.warn("Interrupted while acquiring running transaction.", ie);
+            Thread.currentThread().interrupt();
+            return -1;
+        } finally {
+            lock.unlock();
+        }
+
+        MultiTxnState txnState = new MultiTxnState(connId, txnId);
+        this.txnIdToState.put(txnId, txnState);
+        this.runningMultiTxnDetail.put(txnId, new ArrayDeque<>());
+        LOG.info("Begin a multi txn {} for connection {}.", txnId, connId);
+        persistMultiTransaction(txnState);
+        return txnId;
+    }
+
+    private void endingMultiTransaction(TransactionStatus status, long txnId) {
+        LOG.info("Ending a multi txn {}.", txnId);
+
+        String failMsg = status == TransactionStatus.ABORTED ? "Multi txn " + txnId + " aborted" : "";
+        this.runningMultiTxnDetail.remove(txnId).forEach(commitTxnInfo -> {
+            try {
+                globalStateMgr.getLoadMgr().recordFinishedOrCacnelledLoadJob(
+                        commitTxnInfo.getLoadJobId(), EtlJobType.INSERT, failMsg, commitTxnInfo.getTrackingSql());
+            } catch (UserException e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        MultiTxnState multiTxnState = this.txnIdToState.get(txnId);
+        multiTxnState.setStatus(status);
+        multiTxnState.setFinishTime(System.currentTimeMillis());
+        persistMultiTransaction(multiTxnState);
+
+        lock.lock();
+        try {
+            if (txnId == runningTransactionId) {
+                runningTransactionId = -1;
+                cv.signalAll();
+            } else {
+                LOG.info("Ending multi transaction, ignore a none running transaction: {}", txnId);
+            }
+        } finally {
+            lock.unlock();
+        }
+        LOG.info("Finish end a multi txn {}.", txnId);
+    }
+
+    public void addTxnToMultiTxnQueue(long multiTxnId, Database db, long transactionId, long jobId,
+                                      List<TabletCommitInfo> tabletCommitInfos, List<TabletFailInfo> tabletFailInfos,
+                                      TxnCommitAttachment txnCommitAttachment, long timeoutMs,
+                                      long transactionVisibleWaitTimeout, long tableId, long loadedRows,
+                                      long loadedBytes, String trackingSql) {
+        CommitTxnInfo txnInfo = new CommitTxnInfo(db, transactionId, jobId, tabletCommitInfos,
+                tabletFailInfos, txnCommitAttachment, timeoutMs, transactionVisibleWaitTimeout,
+                tableId, loadedRows, loadedBytes, trackingSql);
+        this.runningMultiTxnDetail.get(multiTxnId).add(txnInfo);
+        persistAddCommitInfo(multiTxnId, txnInfo);
+    }
+
+    public boolean hasBlockingTxns(TableName tblName) {
+        return this.txnIdToState.values().stream()
+                .filter(t -> t.getStatus() == TransactionStatus.PREPARE)
+                .anyMatch(t -> t.hasBlockingTable(tblName));
+    }
+
+    public void addMultiTxnTable(long txnId, TableName tblName) {
+        this.txnIdToState.get(txnId).addWrittenTable(tblName);
+        persistAddTableInfo(txnId, tblName);
+    }
+
+    public void commitMultiTxn(long txnId) throws UserException {
+        Queue<CommitTxnInfo> infos = this.runningMultiTxnDetail.get(txnId);
+        CommitTxnInfo cc;
+        while ((cc = infos.poll()) != null) {
+            try {
+                commitPreparedTransaction(cc.getDb(), cc.getTransactionId(), cc.getTimeoutMs());
+            } catch (TransactionNotFoundException e) {
+                LOG.warn("commit multi transaction {}, txn {} is not found.", txnId, cc.getTransactionId());
+            }
+        }
+        endingMultiTransaction(TransactionStatus.COMMITTED, txnId);
+        LOG.info("Committed a multi txn {}.", txnId);
+    }
+
+    public void abortMultiTxn(long txnId) throws UserException {
+        Queue<CommitTxnInfo> infos = this.runningMultiTxnDetail.get(txnId);
+        CommitTxnInfo cc;
+        while ((cc = infos.poll()) != null) {
+            try {
+                abortTransaction(
+                        cc.getDb().getId(),
+                        cc.getTransactionId(),
+                        TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                cc.getTrackingSql(),
+                        cc.getTabletCommitInfos(),
+                        cc.getTabletFailInfos(), null);
+            } catch (TransactionNotFoundException e) {
+                LOG.warn("abort multi transaction {}, txn {} is not found.", txnId, cc.getTransactionId());
+            }
+        }
+        endingMultiTransaction(TransactionStatus.ABORTED, txnId);
+        LOG.info("Aborted a multi txn {}.", txnId);
+    }
+
+    public List<List<String>> getMultiTxnInfo() {
+        List<List<String>> result = new ArrayList<>();
+        this.txnIdToState.values().stream()
+                .sorted(MultiTxnState.MULTI_TXN_COMPARATOR)
+                .forEach(txnState -> {
+                    List<String> element = new ArrayList<>();
+                    element.add(String.valueOf(txnState.getConnId()));
+                    element.add(String.valueOf(txnState.getTxnId()));
+                    element.add(txnState.getStatus().name());
+                    element.add(txnState.getWrittenTables().toString());
+                    element.add(TimeUtils.longToTimeString(txnState.getPrepareTime()));
+                    element.add(TimeUtils.longToTimeString(txnState.getFinishTime()));
+                    result.add(element);
+                });
+        return result;
+    }
+
+    private void persistMultiTransaction(MultiTxnState txnState) {
+        GlobalStateMgr.getCurrentState().getEditLog().logMultiTransactionState(txnState);
+    }
+
+    private void persistAddCommitInfo(long txnId, CommitTxnInfo commitTxnInfo) {
+        GlobalStateMgr.getCurrentState().getEditLog().logMultiTransactionAddCommitTxnInfo(txnId, commitTxnInfo);
+    }
+
+    private void persistAddTableInfo(long txnId, TableName tableName) {
+        GlobalStateMgr.getCurrentState().getEditLog().logMultiTransactionAddTableInfo(txnId, tableName);
+    }
+
+    public void replayMultiTxn(MultiTxnState txnState) {
+        if (txnState.getStatus() == TransactionStatus.UNKNOWN) {
+            LOG.info("Replay remove unknown multi transaction: {}", txnState);
+            return;
+        }
+        long txnId = txnState.getTxnId();
+        long connId = txnState.getConnId();
+        TransactionStatus status = txnState.getStatus();
+        this.txnIdToState.put(txnId, txnState);
+        if (status == TransactionStatus.PREPARE) {
+            this.runningMultiTxnDetail.put(txnId, new ArrayDeque<>());
+            this.runningTransactionId = txnId; // should we lock here?
+            LOG.info("Replay begin a multi txn {} for connection {}.", txnId, connId);
+        } else {
+            this.runningMultiTxnDetail.remove(txnId);
+            this.runningTransactionId = -1;
+            LOG.info("Replay {} a multi txn {} for connection {}.",
+                    (status == TransactionStatus.COMMITTED ? "commit" : "abort"), txnId, connId);
+        }
+    }
+
+    public void replayMultiTxnAddCommitInfo(long multiTxnId, CommitTxnInfo txnInfo) {
+        LOG.info("Replay multi transaction {} add commit info {}", multiTxnId, txnInfo.transactionId);
+        Queue<CommitTxnInfo> queue = this.runningMultiTxnDetail.get(multiTxnId);
+        if (queue != null) {
+            queue.add(txnInfo);
+        }
+    }
+
+    public void replayMultiTxnAddTableInfo(long txnId, TableName tblName) {
+        LOG.info("Replay multi transaction {} add table {}", txnId, tblName);
+        MultiTxnState state = this.txnIdToState.get(txnId);
+        if (state != null) {
+            state.addWrittenTable(tblName);
+        }
+    }
+
+    public void removeExpiredMultiTxns() {
+        long expiredTime = System.currentTimeMillis() - Config.multi_txn_expire_seconds * 1000L;
+        Set<Long> needRemove = new HashSet<>();
+        for (Map.Entry<Long, MultiTxnState> kv : this.txnIdToState.entrySet()) {
+            if (kv.getValue().isExpired(expiredTime)) {
+                needRemove.add(kv.getKey());
+            }
+        }
+        LOG.info("Remove multi txns {}.", needRemove);
+        needRemove.forEach(k -> this.txnIdToState.remove(k));
     }
 }

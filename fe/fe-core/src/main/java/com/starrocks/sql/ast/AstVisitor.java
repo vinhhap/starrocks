@@ -62,6 +62,9 @@ import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.ast.translate.TranslateStmt;
+import com.starrocks.sql.ast.txn.BeginTransactionStmt;
+import com.starrocks.sql.ast.txn.CommitTransactionStmt;
+import com.starrocks.sql.ast.txn.RollbackTransactionStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -107,6 +110,20 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitDeallocatePrepareStatement(DeallocateStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ---------------------------------------- Multi Statement Transaction ---------------------------------------------
+
+    default R visitBeginTransactionStatement(BeginTransactionStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitCommitTransactionStatement(CommitTransactionStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitRollbackTransactionStatement(RollbackTransactionStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

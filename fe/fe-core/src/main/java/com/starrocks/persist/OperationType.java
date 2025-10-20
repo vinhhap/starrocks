@@ -733,6 +733,9 @@ public class OperationType {
     public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
     public static final short OP_SAVE_TRANSACTION_ID_V2 = 12111;
     public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 12112;
+    public static final short OP_UPSERT_MULTI_TRANSACTION_STATE = 12113;
+    public static final short OP_MULTI_TRANSACTION_ADD_COMMIT_TXN_INFO = 12114;
+    public static final short OP_MULTI_TRANSACTION_ADD_TABLE = 12115;
 
     //colocate table json format log
     @IgnorableOnReplayFailed

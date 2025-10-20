@@ -456,6 +456,9 @@ import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.ast.translate.TranslateStmt;
+import com.starrocks.sql.ast.txn.BeginTransactionStmt;
+import com.starrocks.sql.ast.txn.CommitTransactionStmt;
+import com.starrocks.sql.ast.txn.RollbackTransactionStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -3886,6 +3889,38 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             StarRocksParser.CancelRefreshDictionaryStatementContext context) {
         String dictionaryName = getQualifiedName(context.qualifiedName()).toString();
         return new CancelRefreshDictionaryStmt(dictionaryName, createPos(context));
+    }
+
+    // ----------------------------------------------- Multi-statement Transaction -----------------------------------------------
+    @Override
+    public ParseNode visitBeginTxnStatement(StarRocksParser.BeginTxnStatementContext context) {
+        return new BeginTransactionStmt(createPos(context));
+    }
+
+    private long getMultiTxnId(StarRocksParser.IdentifierContext txnIdContext) throws SemanticException {
+        long txnId = -1;
+        if (txnIdContext != null) {
+            Identifier txnIdentifier = (Identifier) visit(txnIdContext);
+            String txnIdStr = txnIdentifier.getValue();
+            try {
+                txnId = Long.parseLong(txnIdStr);
+            } catch (Exception e) {
+                throw new SemanticException(PARSER_ERROR_MSG.invalidIdFormat("txn_id", txnIdStr), txnIdentifier.getPos());
+            }
+        }
+        return txnId;
+    }
+
+    @Override
+    public ParseNode visitCommitTxnStatement(StarRocksParser.CommitTxnStatementContext context) {
+        long txnId = getMultiTxnId(context.txn_id);
+        return new CommitTransactionStmt(txnId, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitRollbackTxnStatement(StarRocksParser.RollbackTxnStatementContext context) {
+        long txnId = getMultiTxnId(context.txn_id);
+        return new RollbackTransactionStmt(txnId, createPos(context));
     }
 
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------

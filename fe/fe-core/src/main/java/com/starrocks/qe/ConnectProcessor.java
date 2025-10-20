@@ -794,6 +794,9 @@ public class ConnectProcessor {
             UserIdentity currentUserIdentity = UserIdentity.fromThrift(request.getCurrent_user_ident());
             ctx.setCurrentUserIdentity(currentUserIdentity);
         }
+        if (request.isSetMulti_txn_id()) {
+            ctx.setRunningMultiTxnId(request.getMulti_txn_id());
+        }
 
         if (request.isSetUser_roles()) {
             List<Long> roleIds = request.getUser_roles().getRole_id_list();
@@ -963,6 +966,8 @@ public class ConnectProcessor {
                 result.setAudit_statistics(AuditStatisticsUtil.toThrift(audit));
             }
         }
+        // after begin stmt, we should bring running multi txn id back.
+        result.setMulti_txn_id(ctx.getRunningMultiTxnId());
         return result;
     }
 

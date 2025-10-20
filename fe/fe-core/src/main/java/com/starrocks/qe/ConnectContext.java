@@ -129,6 +129,8 @@ public class ConnectContext {
     // the same queryId
     protected UUID queryId;
 
+    private long runningMultiTxnId = -1;
+
     // A request will be executed multiple times because of retry or redirect.
     // This id is used to distinguish between different execution instances
     protected TUniqueId executionId;
@@ -760,6 +762,14 @@ public class ConnectContext {
 
     public void setQueryId(UUID queryId) {
         this.queryId = queryId;
+    }
+
+    public long getRunningMultiTxnId() {
+        return this.runningMultiTxnId;
+    }
+
+    public void setRunningMultiTxnId(long runningMultiTxnId) {
+        this.runningMultiTxnId = runningMultiTxnId;
     }
 
     public UUID getLastQueryId() {

@@ -182,6 +182,10 @@ import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.translate.TranslateStmt;
+import com.starrocks.sql.ast.txn.BeginTransactionStmt;
+import com.starrocks.sql.ast.txn.CommitTransactionStmt;
+import com.starrocks.sql.ast.txn.MultiTransactionBase;
+import com.starrocks.sql.ast.txn.RollbackTransactionStmt;
 import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.DmlException;
@@ -215,12 +219,14 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.RemoteTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
+import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.VisibleStateWaiter;
@@ -577,6 +583,8 @@ public class StmtExecutor {
                                 throw e;
                             }
                         }
+                    } else if (parsedStmt instanceof MultiTransactionBase) {
+                        LOG.info("skip parsing statement: {}", parsedStmt);
                     } else {
                         execPlan = StatementPlanner.plan(parsedStmt, context);
                         if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
@@ -625,7 +633,9 @@ public class StmtExecutor {
                 LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
             }
 
-            if (parsedStmt instanceof QueryStatement) {
+            if (parsedStmt instanceof MultiTransactionBase) {
+                handleMultiTransaction();
+            } else if (parsedStmt instanceof QueryStatement) {
                 final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
                 context.setStatisticsJob(isStatisticsJob);
 
@@ -826,6 +836,60 @@ public class StmtExecutor {
             }
 
             recordExecStatsIntoContext();
+        }
+    }
+
+    private long getTxnId() throws UserException {
+        long specifiedTxnId = ((MultiTransactionBase) parsedStmt).getTxnId();
+        long txnId = specifiedTxnId != -1 ? specifiedTxnId : this.context.getRunningMultiTxnId();
+        if (txnId == -1) {
+            throw new TransactionException("There is no multi transaction id.");
+        }
+        return txnId;
+    }
+
+    private void handleMultiTransaction() throws UserException {
+        if (!Config.enable_multi_transaction) {
+            return;
+        }
+        if (parsedStmt instanceof BeginTransactionStmt) {
+            if (this.context.getRunningMultiTxnId() != -1) {
+                throw new BeginTransactionException("There is already a running multi transaction.");
+            }
+            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            long expireTimeMs = System.currentTimeMillis() + this.context.getSessionVariable().getQueryTimeoutS() * 1000L;
+            long txnId = transactionMgr.beginMultiTransaction(context.connectionId, expireTimeMs);
+            if (txnId == -1) {
+                throw new BeginTransactionException("Failed to begin multi transaction.");
+            }
+            this.context.setRunningMultiTxnId(txnId);
+            String msg = "begin a multi transaction, id: " + txnId;
+            context.getState().setOk(0, 0, msg);
+        } else if (parsedStmt instanceof CommitTransactionStmt) {
+            long txnId = getTxnId();
+
+            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            transactionMgr.commitMultiTxn(txnId);
+
+            String msg = "finish a multi transaction, id: " + txnId;
+            context.getState().setOk(0, 0, msg);
+            if (txnId == this.context.getRunningMultiTxnId()) {
+                this.context.setRunningMultiTxnId(-1L);
+            }
+        } else if (parsedStmt instanceof RollbackTransactionStmt) {
+            long txnId = getTxnId();
+
+            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            transactionMgr.abortMultiTxn(txnId);
+
+            String msg = "finish a multi transaction, id: " + txnId;
+            context.getState().setOk(0, 0, msg);
+            if (txnId == this.context.getRunningMultiTxnId()) {
+                this.context.setRunningMultiTxnId(-1L);
+            }
+        } else {
+            throw new UserException("Failed to handle multi transaction statement: unknown statement: "
+                    + parsedStmt.getClass().getSimpleName());
         }
     }
 
@@ -2557,28 +2621,54 @@ public class StmtExecutor {
                 } else {
                     attachment = new InsertTxnCommitAttachment(loadedRows, coord.getLoadCounters());
                 }
-                VisibleStateWaiter visibleWaiter = transactionMgr.retryCommitOnRateLimitExceeded(
-                        database,
-                        transactionId,
-                        TabletCommitInfo.fromThrift(coord.getCommitInfos()),
-                        TabletFailInfo.fromThrift(coord.getFailInfos()),
-                        attachment,
-                        jobDeadLineMs - System.currentTimeMillis());
 
-                long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
-                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
-
-                if (visibleWaiter.await(publishWaitMs, TimeUnit.MILLISECONDS)) {
-                    txnStatus = TransactionStatus.VISIBLE;
-                    MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
-                    // collect table-level metrics
-                    TableMetricsEntity entity =
-                            TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
-                    entity.counterInsertLoadFinishedTotal.increase(1L);
-                    entity.counterInsertLoadRowsTotal.increase(loadedRows);
-                    entity.counterInsertLoadBytesTotal.increase(loadedBytes);
+                if (context.getRunningMultiTxnId() != -1) {
+                    transactionMgr.addTxnToMultiTxnQueue(
+                            context.getRunningMultiTxnId(),
+                            database,
+                            transactionId,
+                            jobId,
+                            TabletCommitInfo.fromThrift(coord.getCommitInfos()),
+                            TabletFailInfo.fromThrift(coord.getFailInfos()),
+                            attachment,
+                            jobDeadLineMs - System.currentTimeMillis(),
+                            context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
+                            targetTable.getId(),
+                            loadedRows,
+                            loadedBytes,
+                            trackingSql);
+                    transactionMgr.prepareTransaction(
+                            database.getId(),
+                            transactionId,
+                            TabletCommitInfo.fromThrift(coord.getCommitInfos()),
+                            TabletFailInfo.fromThrift(coord.getFailInfos()),
+                            attachment,
+                            jobDeadLineMs - System.currentTimeMillis());
+                    txnStatus = TransactionStatus.PREPARED;
                 } else {
-                    txnStatus = TransactionStatus.COMMITTED;
+                    VisibleStateWaiter visibleWaiter = transactionMgr.retryCommitOnRateLimitExceeded(
+                            database,
+                            transactionId,
+                            TabletCommitInfo.fromThrift(coord.getCommitInfos()),
+                            TabletFailInfo.fromThrift(coord.getFailInfos()),
+                            attachment,
+                            jobDeadLineMs - System.currentTimeMillis());
+
+                    long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
+                            context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
+
+                    if (visibleWaiter.await(publishWaitMs, TimeUnit.MILLISECONDS)) {
+                        txnStatus = TransactionStatus.VISIBLE;
+                        MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+                        // collect table-level metrics
+                        TableMetricsEntity entity =
+                                TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
+                        entity.counterInsertLoadFinishedTotal.increase(1L);
+                        entity.counterInsertLoadRowsTotal.increase(loadedRows);
+                        entity.counterInsertLoadBytesTotal.increase(loadedBytes);
+                    } else {
+                        txnStatus = TransactionStatus.COMMITTED;
+                    }
                 }
             }
         } catch (Throwable t) {
@@ -2659,7 +2749,7 @@ public class StmtExecutor {
         }
 
         String errMsg = "";
-        if (txnStatus.equals(TransactionStatus.COMMITTED)) {
+        if (context.getRunningMultiTxnId() == -1 && txnStatus.equals(TransactionStatus.COMMITTED)) {
             String timeoutInfo = transactionMgr.getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
             LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
             if (timeoutInfo.length() > 240) {
@@ -2668,7 +2758,8 @@ public class StmtExecutor {
             errMsg = "Publish timeout " + timeoutInfo;
         }
         try {
-            if (jobId != -1) {
+            // if multi txn doesn't commit or abort, the job can be ignored.
+            if (context.getRunningMultiTxnId() == -1 && jobId != -1) {
                 context.getGlobalStateMgr().getLoadMgr().recordFinishedOrCacnelledLoadJob(jobId,
                         EtlJobType.INSERT,
                         "",

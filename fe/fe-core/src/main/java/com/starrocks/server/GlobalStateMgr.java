@@ -2601,6 +2601,11 @@ public class GlobalStateMgr {
             LOG.warn("transaction manager remove expired txns failed", t);
         }
         try {
+            globalTransactionMgr.removeExpiredMultiTxns();
+        } catch (Throwable t) {
+            LOG.warn("transaction manager remove expired multi txns failed", t);
+        }
+        try {
             routineLoadMgr.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
