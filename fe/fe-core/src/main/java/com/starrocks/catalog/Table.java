@@ -211,6 +211,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     @SerializedName(value = "mvs")
     protected Set<MvId> relatedMaterializedViews;
 
+    protected TableSnapshotInfo tableSnapshotInfo;
+
     // unique constraints for mv rewrite
     // a table may have multi unique constraints
     protected List<UniqueConstraint> uniqueConstraints;
@@ -236,6 +238,14 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         updateSchemaIndex();
         this.createTime = Instant.now().getEpochSecond();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
+    }
+
+    public TableSnapshotInfo getTableSnapshotInfo() {
+        return tableSnapshotInfo;
+    }
+
+    public void setTableSnapshotInfo(TableSnapshotInfo tableSnapshotInfo) {
+        this.tableSnapshotInfo = tableSnapshotInfo;
     }
 
     public long getId() {
@@ -746,6 +756,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public boolean supportPreCollectMetadata() {
+        return false;
+    }
+
+    public boolean supportTimeTravel() {
         return false;
     }
 

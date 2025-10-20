@@ -118,6 +118,11 @@ public class PaimonTable extends Table {
     }
 
     @Override
+    public boolean supportTimeTravel() {
+        return true;
+    }
+
+    @Override
     public String getTableLocation() {
         if (paimonNativeTable instanceof DataTable) {
             return ((DataTable) paimonNativeTable).location().toString();

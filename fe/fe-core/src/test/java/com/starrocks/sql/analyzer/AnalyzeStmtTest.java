@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
@@ -24,6 +25,8 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableSnapshotInfo;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -34,7 +37,9 @@ import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -43,6 +48,7 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -486,6 +492,61 @@ public class AnalyzeStmtTest {
             analyzeSuccess("select Ka1 from db.upper_tbl");
         } finally {
             AnalyzeTestUtil.connectContext.getSessionVariable().setEnableAnalyzePhasePruneColumns(false);
+        }
+    }
+
+    @Test
+    public void testTimeTravel() throws Exception {
+
+        StarRocksAssert sr = AnalyzeTestUtil.getStarRocksAssert();
+        // mock db and table
+        sr.withDatabase("time_travel_db").useDatabase("time_travel_db");
+        Table paimonTable = new Table(1L, "tt_0", Table.TableType.PAIMON,
+                ImmutableList.of(new Column("id", Type.BIGINT), new Column("name", Type.STRING))) {
+            @Override
+            public boolean supportTimeTravel() {
+                return true;
+            }
+
+            @Override
+            public boolean isSupported() {
+                return true;
+            }
+
+        };
+        Database db = GlobalStateMgr.getCurrentState().getDb("time_travel_db");
+        db.registerTableUnlocked(paimonTable);
+
+        // sql1: SYSTEM_TIME
+        String sql1 = "SELECT * FROM time_travel_db.tt_0 FOR SYSTEM_TIME AS OF '2025-09-21 21:06:49'";
+        // sql2: TIMESTAMP
+        String sql2 = "SELECT * FROM time_travel_db.tt_0 FOR TIMESTAMP AS OF 8888888888888;";
+        // sql3: VERSION
+        String sql3 = "SELECT * FROM time_travel_db.tt_0 FOR VERSION AS OF 139384;";
+
+        QueryStatement queryStmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(sql3, sr.getCtx());
+        QueryRelation relation = queryStmt.getQueryRelation();
+        if (relation instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) relation;
+            Relation fromRelation = selectRelation.getRelation();
+            if (fromRelation instanceof TableRelation) {
+                TableRelation tableRelation = (TableRelation) fromRelation;
+                TableSnapshotInfo tableSnapshotInfo = tableRelation.getTable().getTableSnapshotInfo();
+
+                Assert.assertEquals("VERSION", tableSnapshotInfo.getType().name());
+                Assert.assertEquals("139384", tableSnapshotInfo.getValue());
+
+                Assert.assertEquals("TIMESTAMP_MILLIS", tableSnapshotInfo.getType().name());
+                Assert.assertEquals("8888888888888", tableSnapshotInfo.getValue());
+
+                Assert.assertEquals("TIMESTAMP", tableSnapshotInfo.getType().name());
+                Assert.assertEquals("2025-09-21 21:06:49", tableSnapshotInfo.getValue());
+
+            } else {
+                Assert.fail("Expected TableRelation");
+            }
+        } else {
+            Assert.fail("Expected SelectRelation");
         }
     }
 }
