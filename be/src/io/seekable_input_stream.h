@@ -153,6 +153,8 @@ public:
 
     void set_stream_item_type(StreamItemType type) override { return _impl->set_stream_item_type(type); }
 
+    Status touch_cache(int64_t offset, size_t length) override { return _impl->touch_cache(offset, length); }
+
 private:
     SeekableInputStream* _impl;
     Ownership _ownership;
