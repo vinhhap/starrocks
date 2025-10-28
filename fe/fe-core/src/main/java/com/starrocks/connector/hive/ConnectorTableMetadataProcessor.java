@@ -199,8 +199,8 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                             futures.add(refreshRemoteFileExecutor.submit(() -> {
                                         try {
                                             ((CachingCatalog) paimonCatalog).refreshPartitions(new Identifier(dbName, tblName));
-                                        } catch (Catalog.TableNotExistException e) {
-                                            throw new RuntimeException(e);
+                                        } catch (Exception e) {
+                                            LOG.warn("Failed to refresh paimon table {}.{}.{}", catalogName, dbName, tblName, e);
                                         }
                                     }
                             ));
@@ -210,7 +210,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                         }
                     }
                 } catch (Exception e) {
-                    throw new RuntimeException(e);
+                    LOG.warn("Failed to refresh paimon db {}.{}.", catalogName, dbName, e);
                 }
             }
             LOG.info("Finish to refresh paimon catalog {}", catalogName);

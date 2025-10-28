@@ -44,7 +44,6 @@ import com.starrocks.credential.aliyun.AliyunCloudCredential;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
@@ -62,12 +61,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.data.BinaryRow;
-import org.apache.paimon.format.aliorc.AliOrcFileFormatFactory;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataOutputViewStreamWrapper;
 import org.apache.paimon.rest.RESTToken;
 import org.apache.paimon.rest.RESTTokenFileIO;
-import org.apache.paimon.table.DataTable;
 import org.apache.paimon.table.Table;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.FileStoreTable;
@@ -202,7 +199,7 @@ public class PaimonScanNode extends ScanNode {
                 if (optionalRawFiles.isEmpty()) {
                     if (forceJNIReader) {
                         readerType = PaimonReaderType.JNI;
-                    } else if (forcePaimonNativeReader || AliOrcFileFormatFactory.IDENTIFIER.equals(tableFileFormat)) {
+                    } else if (forcePaimonNativeReader || "aliorc".equals(tableFileFormat)) {
                         readerType = PaimonReaderType.PAIMON_NATIVE;
                     } else {
                         readerType = PaimonReaderType.JNI;
@@ -210,7 +207,7 @@ public class PaimonScanNode extends ScanNode {
                 } else {
                     if (forceJNIReader) {
                         readerType = PaimonReaderType.JNI;
-                    } else if (forcePaimonNativeReader || AliOrcFileFormatFactory.IDENTIFIER.equals(tableFileFormat)) {
+                    } else if (forcePaimonNativeReader || "aliorc".equals(tableFileFormat)) {
                         readerType = PaimonReaderType.PAIMON_NATIVE;
                     } else if (nativeSupportedFormat) {
                         readerType = PaimonReaderType.STARROCKS_NATIVE;
