@@ -889,6 +889,9 @@ public class BackupJob extends AbstractJob {
                 info.add(Joiner.on(", ").join(taskProgress.entrySet().stream().map(
                         e -> "[" + e.getKey() + ": " + e.getValue().first + "/" + e.getValue().second + "]").collect(
                         Collectors.toList())));
+            } else {
+                info.add("");
+                info.add("");
             }
 
             info.add(Joiner.on(", ").join(taskErrMsg.entrySet().stream().map(n -> "[" + n.getKey() + ": " + n.getValue()
