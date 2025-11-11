@@ -67,6 +67,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
     }
 
     SegmentWriterOptions opts;
+    opts.segment_file_mark = dest->path;
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
@@ -266,6 +267,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
 
     // Write a complete segment file
     SegmentWriterOptions opts;
+    opts.segment_file_mark = dest->path;
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init());
 
@@ -298,6 +300,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const FileEncryptio
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(fopts, src_path));
 
     SegmentWriterOptions opts;
+    opts.segment_file_mark = src_path;
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
