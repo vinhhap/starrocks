@@ -183,7 +183,9 @@ public class TransactionLoadAction extends RestBaseAction {
         OpMetrics opMetrics = null;
         long startTime = System.currentTimeMillis();
         try {
-            if (redirectToLeader(request, response)) {
+            // Should never retry transaction operation when redirecting to leader,
+            // e.g. if we retry `TXN_LOAD` operation, we might introduce duplicate of data
+            if (redirectToLeaderWithRetry(request, response, 0 /* maxRetryTimes */)) {
                 return;
             }
             TransactionOperation txnOperation = TransactionOperation.parse(request.getSingleParameter(TXN_OP_KEY))
@@ -299,6 +301,12 @@ public class TransactionLoadAction extends RestBaseAction {
         Long nodeId;
         // save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
         if (TXN_BEGIN.equals(txnOperation)) {
+            // Ensure that the label is unique, in case of retry
+            Long existedNodeId = accessTxnNodeMapWithReadLock(txnNodeMap -> txnNodeMap.get(label));
+            if (existedNodeId != null) {
+
+                return existedNodeId;
+            }
             List<Long> nodeIds = LoadAction.selectNodes(warehouseName);
             Long chosenNodeId = nodeIds.get(0);
             nodeId = chosenNodeId;
