@@ -2401,6 +2401,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
 - Introduced in: -
 
+##### partition_recycle_retention_period_secs
+
+- Default: 1800
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE or materialized view refresh operations. Note that such metadata cannot be recovered by executing [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md).
+- Introduced in: v3.5.9
+
 ##### enable_auto_tablet_distribution
 
 - Default: true

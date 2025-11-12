@@ -158,4 +158,23 @@ public class DropPartitionTest {
         Assert.assertEquals(1, replicaList.size());
         Assert.assertNull(partition);
     }
+
+    @Test
+    public void testDropPartitionWithRetention() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+
+        // partition is not in recycle bin
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getPartitions(table.getId()).isEmpty());
+
+        Partition partition = table.getPartition("p20210203");
+        long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+        table.dropPartitionWithRetention(db.getId(), "p20210203", 100);
+        partition = table.getPartition("p20210203");
+
+        // after drop with retention, partition is put into recycle bin
+        Assert.assertFalse(GlobalStateMgr.getCurrentState().getRecycleBin().getPartitions(table.getId()).isEmpty());
+        // but partition has been removed from inner state
+        Assert.assertNull(partition);
+    }
 }

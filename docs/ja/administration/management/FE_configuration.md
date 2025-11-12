@@ -1790,6 +1790,25 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: tablet 削除のタイムアウト期間。
 - 導入バージョン: -
 
+
+##### catalog_trash_expire_second
+
+- デフォルト: 86400
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: データベース、テーブル、またはパーティションが削除された後にメタデータが保持される最長期間。この期間が経過すると、データは削除され、[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) コマンドを使用して回復することはできません。
+- 導入バージョン: -
+
+##### partition_recycle_retention_period_secs
+
+- デフォルト: 1800
+- イプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: INSERT OVERWRITE またはマテリアライズドビューのリフレッシュ操作によって削除されるパーティションのメタデータ保持期間。このようなメタデータは、[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) を実行しても復元できないことに注意してください。
+- 導入バージョン: v3.5.9
+
 ##### check_consistency_default_timeout_second
 
 - デフォルト: 600
