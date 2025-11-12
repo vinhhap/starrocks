@@ -351,6 +351,11 @@ public class ComputeNode implements IComputable, Writable {
         return lastMissingHeartbeatTime;
     }
 
+    @VisibleForTesting
+    public void setLastMissingHeartbeatTime(long lastMissingHeartbeatTime) {
+        this.lastMissingHeartbeatTime = lastMissingHeartbeatTime;
+    }
+
     public boolean isAlive() {
         return this.isAlive.get();
     }
