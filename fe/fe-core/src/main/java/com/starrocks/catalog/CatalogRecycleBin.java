@@ -229,10 +229,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         disableRecoverPartitionWithSameName(dbId, tableId, partitionName);
 
         long recycleTime = recyclePartitionInfo.isRecoverable() ? System.currentTimeMillis() : 0;
+        // If retention period is set, set recycle time to current time
+        if (recyclePartitionInfo.getRetentionPeriod() > 0) {
+            recycleTime = System.currentTimeMillis();
+        }
         idToRecycleTime.put(partitionId, recycleTime);
         idToPartition.put(partitionId, recyclePartitionInfo);
-        LOG.info("Finished put partition '{}' to recycle bin. dbId: {} tableId: {} partitionId: {} recoverable: {}",
-                partitionName, dbId, tableId, partitionId, recyclePartitionInfo.isRecoverable());
+        LOG.info("Finished put partition '{}' to recycle bin." +
+                " dbId: {} tableId: {} partitionId: {} recoverable: {}, recycleTime: {}",
+                partitionName, dbId, tableId, partitionId, recyclePartitionInfo.isRecoverable(), recycleTime);
     }
 
     public synchronized Partition getPartition(long partitionId) {
@@ -304,7 +309,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
      * if we can erase this instance, we should check if anyone enable erase later.
      * Only used by main loop.
      */
-    private synchronized boolean timeExpired(long id, long currentTimeMs) {
+    @VisibleForTesting
+    public synchronized boolean timeExpired(long id, long currentTimeMs) {
         long latencyMs = currentTimeMs - idToRecycleTime.get(id);
         long expireMs = max(Config.catalog_trash_expire_second * 1000L, MIN_ERASE_LATENCY);
         // customize expireMs for partition that need to be retained for a configurable period
@@ -315,6 +321,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 // while retention period is set, `catalog_trash_expire_second` will not take effect and the partition
                 // is assumed to have been set un-recoverable (i.e. partition is not recoverable)
                 expireMs = max(recyclePartitionInfo.getRetentionPeriod() * 1000, MIN_ERASE_LATENCY);
+                LOG.debug("Partition '{}' have been set retained, expireMs: {}}, latencyMs: {}",
+                        recyclePartitionInfo.getPartition().getId(), expireMs, latencyMs);
             }
         }
         if (enableEraseLater.contains(id)) {
@@ -647,7 +655,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 continue;
             }
             partitionInfo.setRecoverable(false);
-            idToRecycleTime.replace(partitionInfo.getPartition().getId(), 0L);
+            // if retention period is not set, reset recycle time to 0 to accelerate deletion;
+            // otherwise, keep its recycle time for partition retention need
+            if (partitionInfo.getRetentionPeriod() <= 0) {
+                idToRecycleTime.replace(partitionInfo.getPartition().getId(), 0L);
+            }
             break;
         }
     }

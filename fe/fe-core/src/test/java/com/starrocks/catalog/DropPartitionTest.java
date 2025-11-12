@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
@@ -65,7 +66,8 @@ public class DropPartitionTest {
         String createTableStr = "create table test.tbl1(d1 date, k1 int, k2 bigint) duplicate key(d1, k1) "
                 + "PARTITION BY RANGE(d1) (PARTITION p20210201 VALUES [('2021-02-01'), ('2021-02-02')),"
                 + "PARTITION p20210202 VALUES [('2021-02-02'), ('2021-02-03')),"
-                + "PARTITION p20210203 VALUES [('2021-02-03'), ('2021-02-04'))) distributed by hash(k1) "
+                + "PARTITION p20210203 VALUES [('2021-02-03'), ('2021-02-04')),"
+                + "PARTITION p20210204 VALUES [('2021-02-04'), ('2021-02-05'))) distributed by hash(k1) "
                 + "buckets 1 properties('replication_num' = '1');";
         createDb(createDbStmtStr);
         createTable(createTableStr);
@@ -160,21 +162,29 @@ public class DropPartitionTest {
     }
 
     @Test
-    public void testDropPartitionWithRetention() {
+    public void testDropPartitionWithRetention() throws InterruptedException {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
 
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         // partition is not in recycle bin
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getPartitions(table.getId()).isEmpty());
+        Assert.assertTrue(recycleBin.getPartitions(table.getId()).isEmpty());
 
-        Partition partition = table.getPartition("p20210203");
-        long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
-        table.dropPartitionWithRetention(db.getId(), "p20210203", 100);
-        partition = table.getPartition("p20210203");
+        Partition partition = table.getPartition("p20210204");
+        long partitionId = partition.getId();
+        table.dropPartitionWithRetention(db.getId(), "p20210204", 100);
+        partition = table.getPartition("p20210204");
 
         // after drop with retention, partition is put into recycle bin
-        Assert.assertFalse(GlobalStateMgr.getCurrentState().getRecycleBin().getPartitions(table.getId()).isEmpty());
+        Assert.assertFalse(recycleBin.getPartitions(table.getId()).isEmpty());
         // but partition has been removed from inner state
         Assert.assertNull(partition);
+
+        // partition should not be expired
+        Assert.assertFalse(recycleBin.timeExpired(partitionId, System.currentTimeMillis() + 100));
+
+        // After retention time, partition should be expired
+        Assert.assertTrue(recycleBin.timeExpired(partitionId,
+                System.currentTimeMillis() + Config.partition_recycle_retention_period_secs * 1000));
     }
 }

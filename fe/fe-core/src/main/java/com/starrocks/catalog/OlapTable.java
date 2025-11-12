@@ -1461,6 +1461,7 @@ public class OlapTable extends Table {
             return;
         }
         if (partitionRetentionPeriod > 0) {
+            LOG.debug("drop partition with retention period: {}, partition id: {}", partitionName, partition.getId());
             RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, partition);
             // mark the partition as not recoverable
             recyclePartitionInfo.setRecoverable(false);
