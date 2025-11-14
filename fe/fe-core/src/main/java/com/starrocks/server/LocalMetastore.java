@@ -1437,6 +1437,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // drop
         if (isTempPartition) {
             olapTable.dropTempPartition(partitionName, true);
+            logDropPartitionEditLog(db, clause, olapTable, partitionName, true);
         } else {
             Partition partition = olapTable.getPartition(partitionName);
             if (!clause.isForceDrop()) {
@@ -1459,6 +1460,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
             }
             olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
+            // while dropping partition operation has succeeded, we should write edit log immediately,
+            // prevent unexpected exceptions threw and missed writing edit log, which may further lead to inconsistency
+            // between leader and follower FEs.
+            logDropPartitionEditLog(db, clause, olapTable, partitionName, false);
             if (olapTable instanceof MaterializedView) {
                 MaterializedView mv = (MaterializedView) olapTable;
                 SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
@@ -1477,14 +1482,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 throw new DdlException("fail to refresh materialized views when dropping partition", e);
             }
         }
+    }
 
-        // log
+    private static void logDropPartitionEditLog(Database db, DropPartitionClause clause, OlapTable olapTable,
+                                                String partitionName, boolean isTempPartition) {
         DropPartitionInfo info = new DropPartitionInfo(db.getId(), olapTable.getId(), partitionName, isTempPartition,
                 clause.isForceDrop());
         GlobalStateMgr.getCurrentState().getEditLog().logDropPartition(info);
-
-        LOG.info("succeed in droping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
-                clause.isForceDrop());
+        LOG.info("succeed in dropping partition[{}], is temp : {}, is force : {}",
+                partitionName, isTempPartition, clause.isForceDrop());
     }
 
     public void replayDropPartition(DropPartitionInfo info) {
