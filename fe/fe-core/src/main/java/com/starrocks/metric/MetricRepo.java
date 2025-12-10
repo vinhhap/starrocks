@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.authentication.LdapUserCache;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
@@ -119,6 +120,10 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_TIMEOUT;
     public static LongCounterMetric COUNTER_QUERY_SUCCESS;
     public static LongCounterMetric COUNTER_SLOW_QUERY;
+    public static LongCounterMetric COUNTER_LDAP_USER_CACHE_HIT;
+    public static LongCounterMetric COUNTER_LDAP_USER_CACHE_MISS;
+    public static LongCounterMetric COUNTER_LDAP_USER_CACHE_NEGATIVE_HIT;
+    public static LongCounterMetric COUNTER_LDAP_USER_CACHE_EVICTION;
 
     public static LongCounterMetric COUNTER_QUERY_QUEUE_PENDING;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TOTAL;
@@ -482,6 +487,19 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(totalTabletCount);
 
+        GaugeMetric<Long> ldapUserCacheSize = new GaugeMetric<Long>(
+                "ldap_user_cache_size", MetricUnit.NOUNIT, "current ldap user cache size") {
+            @Override
+            public Long getValue() {
+                LdapUserCache.LdapUserCacheInstance instance = LdapUserCache.getOrCreateFromConfig();
+                if (instance.cache() == null) {
+                    return 0L;
+                }
+                return instance.cache().snapshot().size();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(ldapUserCacheSize);
+
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_REQUEST_ALL);
@@ -495,6 +513,18 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_SUCCESS);
         COUNTER_SLOW_QUERY = new LongCounterMetric("slow_query", MetricUnit.REQUESTS, "total slow query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SLOW_QUERY);
+        COUNTER_LDAP_USER_CACHE_HIT = new LongCounterMetric("ldap_user_cache_hit", MetricUnit.REQUESTS,
+            "ldap user cache hits");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LDAP_USER_CACHE_HIT);
+        COUNTER_LDAP_USER_CACHE_MISS = new LongCounterMetric("ldap_user_cache_miss", MetricUnit.REQUESTS,
+            "ldap user cache misses");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LDAP_USER_CACHE_MISS);
+        COUNTER_LDAP_USER_CACHE_NEGATIVE_HIT = new LongCounterMetric("ldap_user_cache_negative_hit",
+            MetricUnit.REQUESTS, "ldap user cache negative hits");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LDAP_USER_CACHE_NEGATIVE_HIT);
+        COUNTER_LDAP_USER_CACHE_EVICTION = new LongCounterMetric("ldap_user_cache_eviction", MetricUnit.REQUESTS,
+            "ldap user cache evictions");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LDAP_USER_CACHE_EVICTION);
         COUNTER_QUERY_QUEUE_PENDING = new LongCounterMetric("query_queue_pending", MetricUnit.REQUESTS,
                 "total pending query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_PENDING);

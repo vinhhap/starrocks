@@ -1986,6 +1986,21 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String authentication_ldap_simple_bind_root_pwd = "";
 
+    @ConfField(mutable = true, comment = "enable ldap user cache for authentication_ldap_simple")
+    public static boolean authentication_ldap_simple_user_cache_enable = false;
+
+    @ConfField(mutable = true, comment = "ldap user cache ttl seconds for successful lookups")
+    public static long authentication_ldap_simple_user_cache_ttl_seconds = 300;
+
+    @ConfField(mutable = true, comment = "ldap user cache ttl seconds for negative lookups")
+    public static long authentication_ldap_simple_user_cache_negative_ttl_seconds = 60;
+
+    @ConfField(mutable = true, comment = "ldap user cache max entries")
+    public static int authentication_ldap_simple_user_cache_max_entries = 1000;
+
+    @ConfField(mutable = true, comment = "store hashed password in ldap user cache")
+    public static boolean authentication_ldap_simple_user_cache_store_password = false;
+
     /**
      * For forward compatibility, will be removed later.
      * check token when download image file.

@@ -39,6 +39,26 @@ authentication_ldap_simple_bind_root_dn =
 authentication_ldap_simple_bind_root_pwd =
 ```
 
+### LDAP user cache (optional)
+
+You can reuse recent LDAP bind results to reduce round-trips. The cache is disabled by default and holds only in-memory data on each FE. Configure it in `fe.conf`:
+
+```Properties
+# Enable the LDAP user cache (default: false).
+authentication_ldap_simple_user_cache_enable = false
+# TTL in seconds for successful lookups (default: 300).
+authentication_ldap_simple_user_cache_ttl_seconds = 300
+# TTL in seconds for negative lookups (default: 60).
+authentication_ldap_simple_user_cache_negative_ttl_seconds = 60
+# Maximum number of cached entries per FE (default: 1000).
+authentication_ldap_simple_user_cache_max_entries = 1000
+# Whether to keep a hashed password to skip rebind within TTL (default: false).
+authentication_ldap_simple_user_cache_store_password = false
+```
+
+- When `authentication_ldap_simple_user_cache_store_password = true`, FE stores a SHA-256 hash of the password in-memory to skip re-binding while the entry is fresh. When it is `false`, FE still rebinds but reuses the cached DN to avoid an extra search. Passwords are never logged.
+- Negative results (user not found) are cached for the shorter negative TTL to avoid repeated failed lookups but will expire quickly to allow newly-created LDAP users to authenticate.
+
 ## DN Matching Mechanism
 
 Starting from v3.5.0, StarRocks supports recording and passing user Distinguished Name (DN) information during LDAP authentication to provide more accurate group resolution.

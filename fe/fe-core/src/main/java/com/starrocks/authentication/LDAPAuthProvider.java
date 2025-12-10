@@ -16,6 +16,8 @@ package com.starrocks.authentication;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.starrocks.authentication.LdapUserCache.LdapUserCacheEntry;
+import com.starrocks.authentication.LdapUserCache.LdapUserCacheKey;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
@@ -80,18 +82,53 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             clearPassword = Arrays.copyOf(authResponse, authResponse.length - 1);
         }
 
-        try {
-            String distinguishedName;
-            if (!Strings.isNullOrEmpty(ldapUserDN)) {
-                distinguishedName = ldapUserDN;
-            } else {
-                distinguishedName = findUserDNByRoot(userIdentity.getUser());
-            }
-            Preconditions.checkNotNull(distinguishedName);
-            checkPassword(distinguishedName, new String(clearPassword, StandardCharsets.UTF_8));
+        String password = new String(clearPassword, StandardCharsets.UTF_8);
+        long now = System.currentTimeMillis();
+        LdapUserCache.LdapUserCacheInstance cacheInstance = LdapUserCache.getOrCreateFromConfig();
+        LdapUserCache cache = cacheInstance.cache();
+        LdapUserCacheKey cacheKey = new LdapUserCacheKey(
+                userIdentity.getUser(), ldapServerHost, ldapServerPort, useSSL,
+                ldapBindBaseDN, ldapSearchFilter, ldapUserDN);
 
-            // set distinguished name to auth context
-            context.setDistinguishedName(distinguishedName);
+        try {
+            String distinguishedName = null;
+            if (cacheInstance.enabled()) {
+                Optional<LdapUserCacheEntry> cachedEntry = cache.getIfValid(cacheKey, now);
+                if (cachedEntry.isPresent()) {
+                    LdapUserCacheEntry entry = cachedEntry.get();
+                    if (entry.isNegative()) {
+                        throw new LdapUserNotFoundException("ldap user not found (cached)");
+                    }
+                    distinguishedName = entry.distinguishedName();
+                    context.setDistinguishedName(distinguishedName);
+                    if (entry.hasPasswordHash() && entry.matchesPassword(password)) {
+                        return;
+                    }
+                }
+            }
+
+            if (distinguishedName == null) {
+                if (!Strings.isNullOrEmpty(ldapUserDN)) {
+                    distinguishedName = ldapUserDN;
+                } else {
+                    distinguishedName = findUserDNByRoot(userIdentity.getUser());
+                }
+                Preconditions.checkNotNull(distinguishedName);
+                context.setDistinguishedName(distinguishedName);
+            }
+
+            // Re-bind if cache is disabled or password reuse is not allowed/missing
+            checkPassword(distinguishedName, password);
+
+            if (cacheInstance.enabled()) {
+                cache.putSuccess(cacheKey, distinguishedName, password, now);
+            }
+        } catch (LdapUserNotFoundException e) {
+            if (cacheInstance.enabled()) {
+                cache.putNegative(cacheKey, now);
+            }
+            LOG.warn("ldap user not found for user: {}", userIdentity.getUser(), e);
+            throw new AuthenticationException(e.getMessage());
         } catch (Exception e) {
             LOG.warn("check password failed for user: {}", userIdentity.getUser(), e);
             throw new AuthenticationException(e.getMessage());
@@ -202,7 +239,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             }
 
             if (matched != 1) {
-                throw new AuthenticationException("ldap search matched user count " + matched);
+                throw new LdapUserNotFoundException("ldap search matched user count " + matched);
             }
 
             return userDN;

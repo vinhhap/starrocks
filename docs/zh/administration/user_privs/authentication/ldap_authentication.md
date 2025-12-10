@@ -39,6 +39,26 @@ authentication_ldap_simple_bind_root_dn =
 authentication_ldap_simple_bind_root_pwd =
 ```
 
+### LDAP 用户缓存（可选）
+
+为减少重复绑定带来的开销，可以开启前端的 LDAP 用户缓存。缓存仅保存在 FE 内存中，默认关闭。
+
+```Properties
+# 是否开启 LDAP 用户缓存（默认：false）。
+authentication_ldap_simple_user_cache_enable = false
+# 成功查找的缓存 TTL，单位秒（默认：300）。
+authentication_ldap_simple_user_cache_ttl_seconds = 300
+# 失败查找的缓存 TTL，单位秒（默认：60）。
+authentication_ldap_simple_user_cache_negative_ttl_seconds = 60
+# 每个 FE 上缓存的最大条目数（默认：1000）。
+authentication_ldap_simple_user_cache_max_entries = 1000
+# 是否在缓存中保存密码哈希以便在 TTL 内跳过重新绑定（默认：false）。
+authentication_ldap_simple_user_cache_store_password = false
+```
+
+- 当 `authentication_ldap_simple_user_cache_store_password = true` 时，FE 仅在内存中保存密码的 SHA-256 哈希，以便在缓存未过期时跳过重新绑定；为 `false` 时仍会重新绑定，但会复用缓存的 DN 以避免额外的搜索。密码不会被记录到日志。
+- 未找到用户的结果会按较短的负缓存 TTL 缓存，避免重复失败的查找，但会很快过期以便新建的 LDAP 用户可以登录。
+
 ## DN 匹配机制
 
 自 v3.5.0 起，StarRocks 支持在 LDAP 认证过程中记录和传递用户的 Distinguished Name (DN) 信息，以提供更准确的组解析功能。
