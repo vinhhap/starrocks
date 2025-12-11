@@ -17,6 +17,6 @@ DOCKER_BUILDKIT=1 docker build \
   --build-arg ARTIFACT_SOURCE=image \
   --build-arg ARTIFACTIMAGE=artifact-ubuntu:local \
   -f docker/dockerfiles/fe/fe-ubuntu.Dockerfile \
-  -t fe-ubuntu:local \
+  -t qnguyen3496/fe-ubuntu:3.5.9_20251211 \
   .
 ```

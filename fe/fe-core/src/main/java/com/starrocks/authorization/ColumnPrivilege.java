@@ -97,7 +97,12 @@ public class ColumnPrivilege {
 
         Map<TableName, Set<String>> scanColumns = new HashMap<>();
         OptExpression optimizedPlan;
-        if (!tableUsedExternalAccessController.isEmpty()) {
+
+        boolean needColumnPruning = tableUsedExternalAccessController.stream()
+                .map(tableNameTableObj::get)
+                .anyMatch(table -> table != null && !(table instanceof View) && !table.isMaterializedView());
+
+        if (!tableUsedExternalAccessController.isEmpty() && needColumnPruning) {
             /*
              * The column access privilege of the query need to use the pruned column list.
              * Because the unused columns will not check the column access privilege.
@@ -130,17 +135,45 @@ public class ColumnPrivilege {
                 continue;
             }
 
+            String catalog = tableName.getCatalog() == null
+                    ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME
+                    : tableName.getCatalog();
+            TableName normalizedTableName = new TableName(catalog, tableName.getDb(), tableName.getTbl());
+
             if (tableUsedExternalAccessController.contains(tableName)) {
-                Set<String> columns = scanColumns.getOrDefault(tableName, new HashSet<>());
-                for (String column : columns) {
-                    try {
-                        Authorizer.checkColumnAction(context,
-                                tableName, column, PrivilegeType.SELECT);
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(
-                                tableName.getCatalog(),
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(), column);
+                try {
+                    if (table instanceof View) {
+                        Authorizer.checkViewAction(context, normalizedTableName, PrivilegeType.SELECT);
+                    } else if (table.isMaterializedView()) {
+                        Authorizer.checkMaterializedViewAction(context, normalizedTableName, PrivilegeType.SELECT);
+                    } else {
+                        Authorizer.checkTableAction(context,
+                                normalizedTableName.getCatalog(), normalizedTableName.getDb(), table.getName(),
+                                PrivilegeType.SELECT);
+                    }
+                } catch (AccessDeniedException e) {
+                    ObjectType objectType = table instanceof View ? ObjectType.VIEW
+                            : (table.isMaterializedView() ? ObjectType.MATERIALIZED_VIEW : ObjectType.TABLE);
+                    String catalogName = normalizedTableName.getCatalog();
+                    String objectName = normalizedTableName.getTbl();
+                    AccessDeniedException.reportAccessDenied(
+                            catalogName,
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.SELECT.name(), objectType.name(), objectName);
+                }
+
+                // Column-level enforcement still applies to base tables for external controllers.
+                if (!(table instanceof View) && !table.isMaterializedView()) {
+                    Set<String> columns = scanColumns.getOrDefault(tableName, new HashSet<>());
+                    for (String column : columns) {
+                        try {
+                            Authorizer.checkColumnAction(context, normalizedTableName, column, PrivilegeType.SELECT);
+                        } catch (AccessDeniedException e) {
+                            AccessDeniedException.reportAccessDenied(
+                                    normalizedTableName.getCatalog(),
+                                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                    PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(), column);
+                        }
                     }
                 }
             } else {
@@ -228,6 +261,10 @@ public class ColumnPrivilege {
             LogicalScanOperator operator = (LogicalScanOperator) node.getOp();
             Table table = operator.getTable();
             TableName tableName = tableObjToTableName.get(table);
+
+            if (tableName == null) {
+                return null;
+            }
 
             if (!scanColumns.containsKey(tableName)) {
                 scanColumns.put(tableName, new HashSet<>());
